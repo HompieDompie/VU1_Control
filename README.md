@@ -17,3 +17,8 @@ Features:
 - Auto detect of silence, the leds will turn off after 10 seconds.
   if input is detected again, leds will turn on.
 - User settings will be saved in the registry.
+  
+
+ ![Schermafbeelding 2024-03-14 101906](https://github.com/HompieDompie/VU1_Control/assets/155307436/46517786-21a8-4772-bc36-5790a55e9670)
+
+
