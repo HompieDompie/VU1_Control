@@ -2,57 +2,34 @@
 using NAudio.Wave;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Data;
-using System.Drawing;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
-using System.Net;
-using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading;
 using System.Windows.Forms;
-using System.Timers;
-using System.Runtime.Remoting.Messaging;
 using Microsoft.Win32;
-using System.Runtime.CompilerServices;
 using System.IO;
 using System.IO.Ports;
 using System.Management;
 using System.Text.RegularExpressions;
-using System.Security.Cryptography;
-using System.Reflection;
-using System.Diagnostics.Eventing.Reader;
-
-
-
-struct ComPort // custom struct with our desired values
-{
-    public string name;
-    public string vid;
-    public string pid;
-    public string description;
-}
-
 
 
 namespace VU1_Control
-{   
+{
     public partial class Form1 : Form
     {
+        // Lotsa globals cause that's how we roll.
         double Sensitivity = 1.0;
         double Smoothness = 0.2;
         WaveInEvent waveIn;
         WasapiLoopbackCapture loopback_capture;
-        static int MaxLeftValueInt { get; set; }
-        static int MaxRightValueInt { get; set; }
-        static float MaxLeftValueFloat { get; set;  }
-        static float MaxRightValueFloat { get; set; }
+        int MaxLeftValueInt { get; set; }
+        int MaxRightValueInt { get; set; }
+        float MaxLeftValueFloat { get; set;  }
+        float MaxRightValueFloat { get; set; }
         
         bool running = false;
-        static SerialPort SP { get; set; }
-        string DebugFileName = @"C:\temp\vu_debug.txt";
+        SerialPort SP { get; set; }
         StreamWriter DebugStream;
         int RedValue, GreenValue, BlueValue;
         DateTime firstZeroTime;
@@ -105,16 +82,7 @@ namespace VU1_Control
             Task.Run(UpdateVU);
         }
 
-        private void Debug(string Message)
-        {
-            if (DebugStream == null)
-            {
-                DebugStream = new StreamWriter(DebugFileName);
-            }
-            DebugStream.WriteLine(Message);
-            DebugStream.Flush();
-        }
-
+  
         private void Form1_Close(object sender, EventArgs e)
         {
             WriteToRegistry();
@@ -759,7 +727,27 @@ namespace VU1_Control
             Thread.EndCriticalRegion();
         }
 
+        // Simple and easy to use debug function
+        
+        string DebugFileName = @"C:\temp\vu_debug.txt";
 
+        private void Debug(string Message)
+        {
+            if (DebugStream == null)
+            {
+                DebugStream = new StreamWriter(DebugFileName);
+            }
+            DebugStream.WriteLine(Message);
+            DebugStream.Flush();
+        }
+    }
+
+    class ComPort // custom struct with our desired values
+    {
+        public string name;
+        public string vid;
+        public string pid;
+        public string description;
     }
 }
 
