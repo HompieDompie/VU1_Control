@@ -1,17 +1,17 @@
-﻿using NAudio.CoreAudioApi;
+﻿using Microsoft.Win32;
+using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Linq;
-using System.Threading.Tasks;
-using System.Threading;
-using System.Windows.Forms;
-using Microsoft.Win32;
 using System.IO;
 using System.IO.Ports;
+using System.Linq;
 using System.Management;
 using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows.Forms;
 
 
 namespace VU1_Control
@@ -25,9 +25,9 @@ namespace VU1_Control
         WasapiLoopbackCapture loopback_capture;
         int MaxLeftValueInt { get; set; }
         int MaxRightValueInt { get; set; }
-        float MaxLeftValueFloat { get; set;  }
+        float MaxLeftValueFloat { get; set; }
         float MaxRightValueFloat { get; set; }
-        
+
         bool running = false;
         SerialPort SP { get; set; }
         StreamWriter DebugStream;
@@ -50,8 +50,6 @@ namespace VU1_Control
 
             FillInputSelector();
 
-            Debug("Input selectors filled");
-            DebugStream.Flush();
             if (!FindVUMeters())
             {
                 MessageBox.Show("No VU meters found.");
@@ -59,18 +57,15 @@ namespace VU1_Control
             }
 
             SetVUMeterValues(0, 0);
-            SetEasing(true, 100, 10);
-            SetEasing(false, 100, 10);
-
-            Debug("After find uv meters");
-            DebugStream.Flush();
+            SetEasing(true, 100, 1);
+            SetEasing(false, 30, 50);
 
             ReadFromRegistry();
             UpdateUI();
-            SetColor(); 
+            SetColor();
 
             // Start when all is setup well
-            if (SelectedDeviceIdx >= 0 && 
+            if (SelectedDeviceIdx >= 0 &&
                 ((SelectedInput == 1 && cbInputs.Items.Count >= SelectedDeviceIdx) ||
                  (SelectedInput == 0 && cbOutputs.Items.Count >= SelectedDeviceIdx)))
             {
@@ -82,7 +77,7 @@ namespace VU1_Control
             Task.Run(UpdateVU);
         }
 
-  
+
         private void Form1_Close(object sender, EventArgs e)
         {
             WriteToRegistry();
@@ -132,6 +127,9 @@ namespace VU1_Control
 
             SelectedDeviceIdx = (int)RegKey.GetValue("SelectedIndex", -1);
             SelectedInput = (int)RegKey.GetValue("SelectedInput", -1);
+
+            LeftDialNr = (int)RegKey.GetValue("LeftDialNr", 0);
+            RightDialNr = (int)RegKey.GetValue("RightDialNr", 1);
         }
 
         private void WriteToRegistry()
@@ -145,6 +143,9 @@ namespace VU1_Control
 
             RegKey.SetValue("SelectedIndex", SelectedDeviceIdx);
             RegKey.SetValue("SelectedInput", SelectedInput);
+
+            RegKey.SetValue("LeftDialNr", LeftDialNr);
+            RegKey.SetValue("RightDialNr", RightDialNr);
         }
 
 
@@ -168,7 +169,7 @@ namespace VU1_Control
                 Debug("  GetSerialPorts: found devices:  " + ports.Count.ToString());
                 foreach (ManagementBaseObject p in ports)
                 {
-                    ComPort c = new ComPort(); 
+                    ComPort c = new ComPort();
                     try
                     {
                         c.name = p.GetPropertyValue("DeviceID").ToString();
@@ -192,71 +193,67 @@ namespace VU1_Control
                         // ignore ports I can't open or error otherwise.
                         Debug("  Error checking device :" + c.name + " " + c.description);
                     }
-                    
+
                 }
                 return list;
             }
         }
 
         // FindVUMeters: From the list of USB ports find the one with the right vid and pid of the VU meters.
-        // Note: Other devices that use the same UART can be found as well. E.g. a Conbee III stick. So a better
-        // check is needed.
+        // Note: Other devices that use the same UART can be found as well. E.g. a Conbee III stick. 
 
         public bool FindVUMeters()
         {
             // VID: 1027 (0x0403) and PID:24597 (0x6015)
+            Debug("Find uv meters");
 
             List<ComPort> ports = GetSerialPorts();
-            //if we want to find one device
-            ComPort com = ports.FindLast(c => c.vid.Equals("0403") && c.pid.Equals("6015"));
 
-            Debug("  FindVUMeters : Find VU meter: " + com.description);
-
-            if (com.description != null)
+            foreach (ComPort com in ports)
             {
-
-                Match mCom = Regex.Match(com.description, @"COM[0-9]{1}", RegexOptions.IgnoreCase);
-                if (!mCom.Success)
+                if (com.description != null && com.vid.Equals("0403") && com.pid.Equals("6015"))
                 {
-                    mCom = Regex.Match(com.description, @"COM[0-9]{2}", RegexOptions.IgnoreCase);
-                }
-                if (mCom.Success)
-                {
-                    string comPortName = mCom.Value;
-
-                    Debug("  FindVUMeters : Open port " + comPortName);
-
-                    if (SP != null)
+                    Match mCom = Regex.Match(com.description, @"COM[0-9]{1}", RegexOptions.IgnoreCase);
+                    if (!mCom.Success)
                     {
-                        SP.Close();
-                        SP.Dispose();
+                        mCom = Regex.Match(com.description, @"COM[0-9]{2}", RegexOptions.IgnoreCase);
                     }
-
-                    using (SP = new System.IO.Ports.SerialPort(comPortName, 115200, System.IO.Ports.Parity.None, 8, System.IO.Ports.StopBits.One))
+                    if (mCom.Success)
                     {
-                        SP.ReadTimeout = 1000; // SerialPort.InfiniteTimeout;
-                        SP.WriteTimeout = 1000;  
-                        SP.NewLine = "\r\n";
+                        string comPortName = mCom.Value;
 
-                        try
+                        Debug("  Found: Open port " + comPortName);
+
+                        if (SP != null)
                         {
-                            SP.Open();
+                            SP.Close();
+                            SP.Dispose();
                         }
-                        catch(Exception e)
+
+                        using (SP = new System.IO.Ports.SerialPort(comPortName, 115200, System.IO.Ports.Parity.None, 8, System.IO.Ports.StopBits.One))
                         {
-                            Debug(" Error opening port " + comPortName + ": " + e.Message);
-                            return false;
+                            SP.ReadTimeout = 250; // SerialPort.InfiniteTimeout;
+                            SP.WriteTimeout = 250;
+                            SP.NewLine = "\r\n";
+                            try
+                            {
+                                SP.Open();
+                                return true;
+                            }
+                            catch (Exception e)
+                            {
+                                Debug("  Error opening port " + comPortName + ": " + e.Message);
+                            }
                         }
                     }
                 }
-            }
-            else
-            {
-                Debug("  FindVUMeters : com.description empty");
-                return false;
+                //else
+                //{
+                //    Debug("  FindVUMeters : incorrect vid or pid or description empty -- skip");
+                //}
             }
 
-            return true;
+            return false;
         }
 
         // SetVUMeterValues: Actually write VU values (left and right) to the meters' USB port.
@@ -269,7 +266,7 @@ namespace VU1_Control
             }
 
             Thread.BeginCriticalRegion();
-    
+
             if (!SP.IsOpen)
             {
                 SP.Open();
@@ -283,29 +280,25 @@ namespace VU1_Control
             if (db2 > 100) db2 = 100;
             if (db2 < 0) db2 = 0;
 
-  
+
 
             string vu1 = ">030400020" + LeftDialNr.ToString();
             string vu2 = ">030400020" + RightDialNr.ToString();
-
-            //Debug(db1.ToString() + " " + db2.ToString());
-            SP.DiscardInBuffer();
 
             try
             {
                 SP.WriteLine(vu1 + db1.ToString("X2"));
             }
-            catch(Exception e)
+            catch (Exception e)
             {
                 Debug("SetVUMeterValue 1: " + e.Message);
                 Thread.EndCriticalRegion();
                 return;
             }
- 
+
             try
             {
                 var readData = SP.ReadLine();
-               // Debug("Rec1: " + readData);
             }
             catch (Exception e)
             {
@@ -314,6 +307,8 @@ namespace VU1_Control
                 return;
             }
 
+            Thread.Sleep(1);    // Needs some sleep otherwise the next readline will timeout often.
+            
             try
             {
                 SP.WriteLine(vu2 + db2.ToString("X2"));
@@ -328,7 +323,6 @@ namespace VU1_Control
             try
             {
                 var readData2 = SP.ReadLine();
-                //Debug("Rec2: " + readData2);
             }
             catch (Exception e)
             {
@@ -343,6 +337,7 @@ namespace VU1_Control
 
         private void FillInputSelector()
         {
+            Debug("Input selectors fill");
             for (int i = 0; i < NAudio.Wave.WaveIn.DeviceCount; i++)
             {
                 var caps = NAudio.Wave.WaveIn.GetCapabilities(i);
@@ -368,7 +363,7 @@ namespace VU1_Control
             if (input)
             {
                 waveIn = new NAudio.Wave.WaveInEvent
-                { 
+                {
                     DeviceNumber = Index, // indicates which microphone to use
                     WaveFormat = new NAudio.Wave.WaveFormat(rate: 22050, bits: 16, channels: 2),
                     BufferMilliseconds = 100
@@ -390,7 +385,13 @@ namespace VU1_Control
                     loopback_capture = new WasapiLoopbackCapture(mm_dev);
                     loopback_capture.DataAvailable += Loopback_capture_DataAvailable;
 
-                    //loopback_capture.RecordingStopped += Loopback_capture_RecordingStopped;
+                    //loopback_capture.RecordingStopped += (sender, args) =>
+                    //{
+                    //    Debug("Recording stopped event.");
+                    //    loopback_capture.Dispose();
+                    //    loopback_capture = null;
+                    //    ResetDeviceNeeded = true;
+                    //};
                     Debug("Listening to output device " + mm_dev.DeviceFriendlyName);
                 }
                 catch (Exception ex)
@@ -403,7 +404,7 @@ namespace VU1_Control
         private void btnStart_Click(object sender, EventArgs e)
         {
             handleStartStop(!running);
-   
+
             if (!running)
             {
                 btnStart.Text = "Start";
@@ -478,8 +479,8 @@ namespace VU1_Control
                 r = Math.Max(MaxRightValueInt, Math.Abs(rightValue));
             }
 
-            MaxLeftValueInt = l ;
-            MaxRightValueInt = r ;
+            MaxLeftValueInt = l;
+            MaxRightValueInt = r;
 
         }
 
@@ -505,17 +506,17 @@ namespace VU1_Control
                 }
             }
 
-            MaxLeftValueInt = (int)(100F * (MaxLeftValueFloat)) ; 
-            MaxRightValueInt = (int)(100F * (MaxRightValueFloat)) ;
+            MaxLeftValueInt = (int)(100F * (MaxLeftValueFloat));
+            MaxRightValueInt = (int)(100F * (MaxRightValueFloat));
 
             //Debug("In:" + e.BytesRecorded.ToString() + " byte. L=" + MaxLeftValueInt.ToString() + " R=" + MaxRightValueInt.ToString() );
         }
 
         private int LastLeftValue = -1;
         private int LastRightValue = -1;
-        
-        // UpdateVU: Seperate task function that periodically sends the current max left and right values to the meters.
 
+        // UpdateVU: Seperate task function that periodically sends the current max left and right values to the meters.
+        
         private void UpdateVU()
         {
             for (; ; )
@@ -572,7 +573,7 @@ namespace VU1_Control
                 if (zeroTimeoutStarted)
                 {
                     zeroTimeoutStarted = false;
-                    ResetDeviceNeeded = true;
+                    //ResetDeviceNeeded = true;
                     SetColor();
                 }
             }
@@ -707,7 +708,7 @@ namespace VU1_Control
             // backlight easing: >160200050000000063'
             string start1 = "0200050" + LeftDialNr.ToString();
             string start2 = "0200050" + RightDialNr.ToString();
-            string step1 = ">1" + stepCmd.ToString() + start1 + "000000" + step.ToString("X2"); 
+            string step1 = ">1" + stepCmd.ToString() + start1 + "000000" + step.ToString("X2");
             string step2 = ">1" + stepCmd.ToString() + start2 + "000000" + step.ToString("X2"); ;
             string period1 = ">1" + periodCmd.ToString() + start1 + "000000" + period.ToString("X2"); ;
             string period2 = ">1" + periodCmd.ToString() + start2 + "000000" + period.ToString("X2"); ;
@@ -727,8 +728,9 @@ namespace VU1_Control
             Thread.EndCriticalRegion();
         }
 
+   
         // Simple and easy to use debug function
-        
+
         string DebugFileName = @"C:\temp\vu_debug.txt";
 
         private void Debug(string Message)
@@ -737,7 +739,7 @@ namespace VU1_Control
             {
                 DebugStream = new StreamWriter(DebugFileName);
             }
-            DebugStream.WriteLine(Message);
+            DebugStream.WriteLine(DateTime.Now + ": " + Message);
             DebugStream.Flush();
         }
     }

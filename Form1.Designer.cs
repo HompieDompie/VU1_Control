@@ -209,6 +209,7 @@ namespace VU1_Control
             this.tbRightDial.Name = "tbRightDial";
             this.tbRightDial.Size = new System.Drawing.Size(24, 20);
             this.tbRightDial.TabIndex = 35;
+            this.tbRightDial.TextChanged += new System.EventHandler(this.tbRightDial_TextChanged);
             // 
             // label8
             // 
@@ -228,6 +229,7 @@ namespace VU1_Control
             this.tbLeftDial.Size = new System.Drawing.Size(24, 20);
             this.tbLeftDial.TabIndex = 33;
             this.tbLeftDial.WordWrap = false;
+            this.tbLeftDial.TextChanged += new System.EventHandler(this.tbLeftDial_TextChanged);
             // 
             // label5
             // 
