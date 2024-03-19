@@ -80,6 +80,7 @@ namespace VU1_Control
 
         private void Form1_Close(object sender, EventArgs e)
         {
+            running = false;
             WriteToRegistry();
             SetColor(0, 0, 0);
             SetVUMeterValues(0, 0);
@@ -454,7 +455,7 @@ namespace VU1_Control
                 {
                     handleAutoOff();
 
-                    //if (LastLeftValue != MaxLeftValueInt || LastRightValue != MaxRightValueInt)
+                    if (LastLeftValue != MaxLeftValueInt || LastRightValue != MaxRightValueInt)
                     {
                         //double newValueL = (Smoothness * LastLeftValue) + (1.0 - Smoothness) * (MaxLeftValueInt * MaxLeftValueInt);
                         //double newValueR = (Smoothness * LastRightValue) + (1.0 - Smoothness) * (MaxRightValueInt * MaxRightValueInt);
