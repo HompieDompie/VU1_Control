@@ -38,6 +38,9 @@ namespace VU1_Control
             this.label11 = new System.Windows.Forms.Label();
             this.label10 = new System.Windows.Forms.Label();
             this.groupBox2 = new System.Windows.Forms.GroupBox();
+            this.tbRightCalibration = new System.Windows.Forms.TextBox();
+            this.label12 = new System.Windows.Forms.Label();
+            this.tbLeftCalibration = new System.Windows.Forms.TextBox();
             this.txtSmoothness = new System.Windows.Forms.Label();
             this.txtSensitiviy = new System.Windows.Forms.Label();
             this.label1 = new System.Windows.Forms.Label();
@@ -132,6 +135,9 @@ namespace VU1_Control
             // 
             // groupBox2
             // 
+            this.groupBox2.Controls.Add(this.tbRightCalibration);
+            this.groupBox2.Controls.Add(this.label12);
+            this.groupBox2.Controls.Add(this.tbLeftCalibration);
             this.groupBox2.Controls.Add(this.txtSmoothness);
             this.groupBox2.Controls.Add(this.txtSensitiviy);
             this.groupBox2.Controls.Add(this.label1);
@@ -150,10 +156,39 @@ namespace VU1_Control
             this.groupBox2.Controls.Add(this.sbSmoothness);
             this.groupBox2.Location = new System.Drawing.Point(18, 156);
             this.groupBox2.Name = "groupBox2";
-            this.groupBox2.Size = new System.Drawing.Size(357, 198);
+            this.groupBox2.Size = new System.Drawing.Size(357, 215);
             this.groupBox2.TabIndex = 26;
             this.groupBox2.TabStop = false;
             this.groupBox2.Text = "Dial Setup";
+            // 
+            // tbRightCalibration
+            // 
+            this.tbRightCalibration.BackColor = System.Drawing.Color.WhiteSmoke;
+            this.tbRightCalibration.Location = new System.Drawing.Point(164, 186);
+            this.tbRightCalibration.MaxLength = 3;
+            this.tbRightCalibration.Name = "tbRightCalibration";
+            this.tbRightCalibration.Size = new System.Drawing.Size(37, 20);
+            this.tbRightCalibration.TabIndex = 41;
+            this.tbRightCalibration.TextChanged += new System.EventHandler(this.tbRightCalibration_TextChanged);
+            // 
+            // label12
+            // 
+            this.label12.AutoSize = true;
+            this.label12.Location = new System.Drawing.Point(12, 189);
+            this.label12.Name = "label12";
+            this.label12.Size = new System.Drawing.Size(56, 13);
+            this.label12.TabIndex = 40;
+            this.label12.Text = "Calibration";
+            // 
+            // tbLeftCalibration
+            // 
+            this.tbLeftCalibration.BackColor = System.Drawing.Color.WhiteSmoke;
+            this.tbLeftCalibration.Location = new System.Drawing.Point(78, 186);
+            this.tbLeftCalibration.MaxLength = 3;
+            this.tbLeftCalibration.Name = "tbLeftCalibration";
+            this.tbLeftCalibration.Size = new System.Drawing.Size(37, 20);
+            this.tbLeftCalibration.TabIndex = 39;
+            this.tbLeftCalibration.TextChanged += new System.EventHandler(this.tbLeftCalibration_TextChanged);
             // 
             // txtSmoothness
             // 
@@ -195,7 +230,7 @@ namespace VU1_Control
             // label9
             // 
             this.label9.AutoSize = true;
-            this.label9.Location = new System.Drawing.Point(126, 162);
+            this.label9.Location = new System.Drawing.Point(126, 163);
             this.label9.Name = "label9";
             this.label9.Size = new System.Drawing.Size(32, 13);
             this.label9.TabIndex = 36;
@@ -204,7 +239,7 @@ namespace VU1_Control
             // tbRightDial
             // 
             this.tbRightDial.BackColor = System.Drawing.Color.WhiteSmoke;
-            this.tbRightDial.Location = new System.Drawing.Point(164, 158);
+            this.tbRightDial.Location = new System.Drawing.Point(164, 159);
             this.tbRightDial.MaxLength = 1;
             this.tbRightDial.Name = "tbRightDial";
             this.tbRightDial.Size = new System.Drawing.Size(24, 20);
@@ -214,7 +249,7 @@ namespace VU1_Control
             // label8
             // 
             this.label8.AutoSize = true;
-            this.label8.Location = new System.Drawing.Point(8, 162);
+            this.label8.Location = new System.Drawing.Point(8, 163);
             this.label8.Name = "label8";
             this.label8.Size = new System.Drawing.Size(60, 13);
             this.label8.TabIndex = 34;
@@ -223,7 +258,7 @@ namespace VU1_Control
             // tbLeftDial
             // 
             this.tbLeftDial.BackColor = System.Drawing.Color.WhiteSmoke;
-            this.tbLeftDial.Location = new System.Drawing.Point(78, 158);
+            this.tbLeftDial.Location = new System.Drawing.Point(78, 159);
             this.tbLeftDial.MaxLength = 1;
             this.tbLeftDial.Name = "tbLeftDial";
             this.tbLeftDial.Size = new System.Drawing.Size(24, 20);
@@ -315,7 +350,7 @@ namespace VU1_Control
             this.btnStart.BackColor = System.Drawing.Color.WhiteSmoke;
             this.btnStart.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
             this.btnStart.Font = new System.Drawing.Font("Microsoft Sans Serif", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.btnStart.Location = new System.Drawing.Point(319, 363);
+            this.btnStart.Location = new System.Drawing.Point(324, 376);
             this.btnStart.Name = "btnStart";
             this.btnStart.Size = new System.Drawing.Size(52, 38);
             this.btnStart.TabIndex = 27;
@@ -329,7 +364,7 @@ namespace VU1_Control
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.Color.White;
             this.BackgroundImageLayout = System.Windows.Forms.ImageLayout.None;
-            this.ClientSize = new System.Drawing.Size(387, 409);
+            this.ClientSize = new System.Drawing.Size(387, 423);
             this.Controls.Add(this.btnStart);
             this.Controls.Add(this.label7);
             this.Controls.Add(this.groupBox1);
@@ -375,6 +410,9 @@ namespace VU1_Control
         private System.Windows.Forms.HScrollBar sbRed;
         private System.Windows.Forms.HScrollBar sbSmoothness;
         private System.Windows.Forms.Button btnStart;
+        private System.Windows.Forms.Label label12;
+        private System.Windows.Forms.TextBox tbLeftCalibration;
+        private System.Windows.Forms.TextBox tbRightCalibration;
     }
 }
 

@@ -25,9 +25,7 @@ namespace VU1_Control
         WasapiLoopbackCapture loopback_capture;
         int MaxLeftValueInt { get; set; }
         int MaxRightValueInt { get; set; }
-        float MaxLeftValueFloat { get; set; }
-        float MaxRightValueFloat { get; set; }
-
+ 
         bool running = false;
         SerialPort SP { get; set; }
         StreamWriter DebugStream;
@@ -38,6 +36,8 @@ namespace VU1_Control
         RegistryKey RegKey;
         int LeftDialNr = 0;
         int RightDialNr = 1;
+        int LeftCalibrateValue;
+        int RightCalibrateValue;
         int SelectedDeviceIdx = -1;
         int SelectedInput = -1;     // 0 = output, 1 = input
         bool ResetDeviceNeeded = false;
@@ -101,6 +101,9 @@ namespace VU1_Control
             tbLeftDial.Text = (LeftDialNr + 1).ToString();
             tbRightDial.Text = (RightDialNr + 1).ToString();
 
+            tbLeftCalibration.Text = LeftCalibrateValue.ToString();
+            tbRightCalibration.Text = RightCalibrateValue.ToString();
+
             if (SelectedInput == 1)
             {
                 cbOutputs.SelectedIndex = -1;
@@ -130,6 +133,9 @@ namespace VU1_Control
 
             LeftDialNr = (int)RegKey.GetValue("LeftDialNr", 0);
             RightDialNr = (int)RegKey.GetValue("RightDialNr", 1);
+
+            LeftCalibrateValue = (int)RegKey.GetValue("LeftCalibrate", 0);
+            RightCalibrateValue = (int)RegKey.GetValue("RightCalibrate", 0);
         }
 
         private void WriteToRegistry()
@@ -146,6 +152,9 @@ namespace VU1_Control
 
             RegKey.SetValue("LeftDialNr", LeftDialNr);
             RegKey.SetValue("RightDialNr", RightDialNr);
+
+            RegKey.SetValue("LeftCalibrate", LeftCalibrateValue);
+            RegKey.SetValue("RightCalibrate", RightCalibrateValue);
         }
 
 
@@ -256,85 +265,7 @@ namespace VU1_Control
             return false;
         }
 
-        // SetVUMeterValues: Actually write VU values (left and right) to the meters' USB port.
-
-        public void SetVUMeterValues(int value1, int value2)
-        {
-            if (SP == null)
-            {
-                return;
-            }
-
-            Thread.BeginCriticalRegion();
-
-            if (!SP.IsOpen)
-            {
-                SP.Open();
-            }
-
-            int db1 = (int)((20 * Math.Log10(value1)) * Sensitivity);
-            if (db1 > 100) db1 = 100;
-            if (db1 < 0) db1 = 0;
-
-            int db2 = (int)((20 * Math.Log10(value2)) * Sensitivity);
-            if (db2 > 100) db2 = 100;
-            if (db2 < 0) db2 = 0;
-
-
-
-            string vu1 = ">030400020" + LeftDialNr.ToString();
-            string vu2 = ">030400020" + RightDialNr.ToString();
-
-            try
-            {
-                SP.WriteLine(vu1 + db1.ToString("X2"));
-            }
-            catch (Exception e)
-            {
-                Debug("SetVUMeterValue 1: " + e.Message);
-                Thread.EndCriticalRegion();
-                return;
-            }
-
-            try
-            {
-                var readData = SP.ReadLine();
-            }
-            catch (Exception e)
-            {
-                Debug("SetVUMeterValue 2: " + e.Message);
-                Thread.EndCriticalRegion();
-                return;
-            }
-
-            Thread.Sleep(1);    // Needs some sleep otherwise the next readline will timeout often.
-            
-            try
-            {
-                SP.WriteLine(vu2 + db2.ToString("X2"));
-            }
-            catch (Exception e)
-            {
-                Debug("SetVUMeterValue 3: " + e.Message);
-                Thread.EndCriticalRegion();
-                return;
-            }
-
-            try
-            {
-                var readData2 = SP.ReadLine();
-            }
-            catch (Exception e)
-            {
-                Debug("SetVUMeterValue 4: " + e.Message);
-                Thread.EndCriticalRegion();
-                return;
-            }
-
-            Thread.EndCriticalRegion();
-        }
-
-
+ 
         private void FillInputSelector()
         {
             Debug("Input selectors fill");
@@ -457,8 +388,7 @@ namespace VU1_Control
 
             int bytesPerSample = waveIn.WaveFormat.BitsPerSample / 8;
             int samplesRecorded = e.BytesRecorded / bytesPerSample;
-            int leftValue = 0, rightValue = 0, l = 0, r = 0;
-            MaxLeftValueInt = MaxRightValueInt = 0;
+            int leftValue = 0, rightValue = 0;
 
             //if (dCnt % 100 == 0) { Debug("In:" + e.BytesRecorded.ToString() + " byte");  }
             //dCnt++;
@@ -475,13 +405,9 @@ namespace VU1_Control
                     leftValue = BitConverter.ToInt32(e.Buffer, indexSample * bytesPerSample);
                     rightValue = BitConverter.ToInt32(e.Buffer, (indexSample + 1) * bytesPerSample);
                 }
-                l = Math.Max(MaxLeftValueInt, Math.Abs(leftValue));
-                r = Math.Max(MaxRightValueInt, Math.Abs(rightValue));
+                MaxLeftValueInt = Math.Max(MaxLeftValueInt, Math.Abs((int)(leftValue / 327.68)));
+                MaxRightValueInt = Math.Max(MaxRightValueInt, Math.Abs((int)(rightValue / 327.68)));
             }
-
-            MaxLeftValueInt = l;
-            MaxRightValueInt = r;
-
         }
 
 
@@ -493,21 +419,17 @@ namespace VU1_Control
 
             int bytesPerSample = loopback_capture.WaveFormat.BitsPerSample / 8;
             int samplesRecorded = e.BytesRecorded / bytesPerSample;
-            //MaxLeftValueFloat = MaxRightValueFloat = 0.0F;
-
+            
             for (int indexSample = 0; indexSample < samplesRecorded; indexSample += 2)
             {
                 if (bytesPerSample == 4)
                 {
                     float value = BitConverter.ToSingle(e.Buffer, indexSample * bytesPerSample);
-                    MaxLeftValueFloat = Math.Max(MaxLeftValueFloat, Math.Abs(value));
+                    MaxLeftValueInt = (int)Math.Max(MaxLeftValueInt, Math.Abs(value * 100.0F));
                     value = BitConverter.ToSingle(e.Buffer, (indexSample + 1) * bytesPerSample);
-                    MaxRightValueFloat = Math.Max(MaxRightValueFloat, Math.Abs(value));
+                    MaxRightValueInt = (int)Math.Max(MaxRightValueInt, Math.Abs(value * 100.0F));
                 }
             }
-
-            MaxLeftValueInt = (int)(100F * (MaxLeftValueFloat));
-            MaxRightValueInt = (int)(100F * (MaxRightValueFloat));
 
             //Debug("In:" + e.BytesRecorded.ToString() + " byte. L=" + MaxLeftValueInt.ToString() + " R=" + MaxRightValueInt.ToString() );
         }
@@ -532,20 +454,107 @@ namespace VU1_Control
                 {
                     handleAutoOff();
 
-                    double newValueL = (Smoothness * LastLeftValue) + (1.0 - Smoothness) * (MaxLeftValueInt * MaxLeftValueInt);
-                    double newValueR = (Smoothness * LastRightValue) + (1.0 - Smoothness) * (MaxRightValueInt * MaxRightValueInt);
-                    MaxLeftValueFloat = MaxRightValueFloat = 0.0F;
-
-                    if (LastLeftValue != (int)(newValueL + 0.5) || LastRightValue != (int)(newValueR + 0.5))
+                    //if (LastLeftValue != MaxLeftValueInt || LastRightValue != MaxRightValueInt)
                     {
+                        //double newValueL = (Smoothness * LastLeftValue) + (1.0 - Smoothness) * (MaxLeftValueInt * MaxLeftValueInt);
+                        //double newValueR = (Smoothness * LastRightValue) + (1.0 - Smoothness) * (MaxRightValueInt * MaxRightValueInt);
+
+                        double newValueL = LastLeftValue * Smoothness + MaxLeftValueInt * (1 - Smoothness);
+                        double newValueR = LastRightValue * Smoothness + MaxRightValueInt * (1 - Smoothness);
+
                         LastLeftValue = (int)(newValueL + 0.5);
                         LastRightValue = (int)(newValueR + 0.5);
+
                         SetVUMeterValues(LastLeftValue, LastRightValue);
                     }
+                    MaxLeftValueInt = MaxRightValueInt = 0;  // Reset max after use
                 }
                 Thread.Sleep(100);
             }
         }
+
+        // SetVUMeterValues: Actually write VU values (left and right) to the meters' USB port.
+
+        public void SetVUMeterValues(int value1, int value2)
+        {
+            if (SP == null)
+            {
+                return;
+            }
+
+            Thread.BeginCriticalRegion();
+
+            if (!SP.IsOpen)
+            {
+                SP.Open();
+            }
+
+            int db1 = (int)((50.0 * Math.Log10(value1)) * Sensitivity);
+            if (db1 > 100) db1 = 100;
+            else if (db1 < 0) db1 = 0;
+            db1 += (LeftCalibrateValue * db1) / 100;
+            if (db1 > 100) db1 = 100;
+            else if (db1 < 0) db1 = 0;
+
+            int db2 = (int)((50.0 * Math.Log10(value2)) * Sensitivity);
+            if (db2 > 100) db2 = 100;
+            else if (db2 < 0) db2 = 0;
+            db2 += (RightCalibrateValue * db2) / 100;
+            if (db2 > 100) db2 = 100;
+            else if (db2 < 0) db2 = 0;
+
+            string vu1 = ">030400020" + LeftDialNr.ToString();
+            string vu2 = ">030400020" + RightDialNr.ToString();
+
+            try
+            {
+                SP.WriteLine(vu1 + db1.ToString("X2"));
+            }
+            catch (Exception e)
+            {
+                Debug("SetVUMeterValue 1: " + e.Message);
+                Thread.EndCriticalRegion();
+                return;
+            }
+
+            try
+            {
+                var readData = SP.ReadLine();
+            }
+            catch (Exception e)
+            {
+                Debug("SetVUMeterValue 2: " + e.Message);
+                Thread.EndCriticalRegion();
+                return;
+            }
+
+            Thread.Sleep(1);    // Needs some sleep otherwise the next readline will timeout often.
+
+            try
+            {
+                SP.WriteLine(vu2 + db2.ToString("X2"));
+            }
+            catch (Exception e)
+            {
+                Debug("SetVUMeterValue 3: " + e.Message);
+                Thread.EndCriticalRegion();
+                return;
+            }
+
+            try
+            {
+                var readData2 = SP.ReadLine();
+            }
+            catch (Exception e)
+            {
+                Debug("SetVUMeterValue 4: " + e.Message);
+                Thread.EndCriticalRegion();
+                return;
+            }
+
+            Thread.EndCriticalRegion();
+        }
+
 
         // handleAutoOff: Check if no input has been detected for a certain time. If so turn off the meters.
 
@@ -630,6 +639,33 @@ namespace VU1_Control
                 RightDialNr = int.Parse(tbRightDial.Text) - 1;
             }
         }
+
+        private void tbLeftCalibration_TextChanged(object sender, EventArgs e)
+        {
+            if (tbLeftCalibration.Text.Length > 0)
+            {
+                try
+                {
+                    LeftCalibrateValue = int.Parse(tbLeftCalibration.Text);
+                }
+                catch { }
+            }
+        }
+
+
+        private void tbRightCalibration_TextChanged(object sender, EventArgs e)
+        {
+            if (tbRightCalibration.Text.Length > 0)
+            {
+                try
+                {
+                    RightCalibrateValue = int.Parse(tbRightCalibration.Text);
+                }
+                catch { }
+            }
+        }
+
+
 
         private void sbRed_Scroll(object sender, ScrollEventArgs e)
         {
@@ -728,7 +764,7 @@ namespace VU1_Control
             Thread.EndCriticalRegion();
         }
 
-   
+
         // Simple and easy to use debug function
 
         string DebugFileName = @"C:\temp\vu_debug.txt";
