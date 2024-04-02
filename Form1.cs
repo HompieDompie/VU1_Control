@@ -4,14 +4,17 @@ using NAudio.Wave;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Drawing;
 using System.IO;
 using System.IO.Ports;
 using System.Linq;
 using System.Management;
+using System.Runtime.Remoting.Channels;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Xml.Linq;
 
 
 namespace VU1_Control
@@ -19,27 +22,28 @@ namespace VU1_Control
     public partial class Form1 : Form
     {
         // Lotsa globals cause that's how we roll.
-        double Sensitivity = 1.0;
-        double Smoothness = 0.2;
-        WaveInEvent waveIn;
-        WasapiLoopbackCapture loopback_capture;
-        int MaxLeftValueInt { get; set; }
-        int MaxRightValueInt { get; set; }
- 
+        const int NR_SETUP = 3;
+
+        Setup [] setup = new Setup[NR_SETUP];
+        int CurrentSetupIndex;
+
+        List<AudioDevice> AudioDeviceList = new List<AudioDevice>();
+
         bool running = false;
         SerialPort SP { get; set; }
         StreamWriter DebugStream;
-        int RedValue, GreenValue, BlueValue;
-        DateTime firstZeroTime;
+        
+        DateTime firstZeroTime, lastAutoSwitchTime;
         bool zeroFound = false;
         bool zeroTimeoutStarted = false;
-        RegistryKey RegKey;
+        
         int LeftDialNr = 0;
         int RightDialNr = 1;
         int LeftCalibrateValue;
         int RightCalibrateValue;
-        int SelectedDeviceIdx = -1;
-        int SelectedInput = -1;     // 0 = output, 1 = input
+        int AutoOffTimeout = 10;
+        bool AutoSwitch = true;
+
         bool ResetDeviceNeeded = false;
 
         public Form1()
@@ -56,18 +60,19 @@ namespace VU1_Control
                 Environment.Exit(0);
             }
 
-            SetVUMeterValues(0, 0);
-            SetEasing(true, 100, 1);
-            SetEasing(false, 30, 50);
-
             ReadFromRegistry();
+            CurrentSetupIndex = 0;    // 1st setup takes preference on startup
+
+            SetEasing(true, 100, 1);
+            SetEasing(false, 30, 500);
             UpdateUI();
+            SetVUMeterValues(0, 0);
             SetColor();
 
+            InitAudioDevices();
+
             // Start when all is setup well
-            if (SelectedDeviceIdx >= 0 &&
-                ((SelectedInput == 1 && cbInputs.Items.Count >= SelectedDeviceIdx) ||
-                 (SelectedInput == 0 && cbOutputs.Items.Count >= SelectedDeviceIdx)))
+            if (setup[CurrentSetupIndex].SelectedDeviceIdx >= 0 && cbOutputs.Items.Count >= setup[CurrentSetupIndex].SelectedDeviceIdx)
             {
                 ResetDeviceNeeded = true;
                 btnStart.Text = "Stop";
@@ -89,15 +94,15 @@ namespace VU1_Control
 
         private void UpdateUI()
         {
-            sbSensitivity.Value = (int)(Sensitivity * 50);
+            sbSensitivity.Value = (int)(setup[CurrentSetupIndex].Sensitivity * 50);
             txtSensitiviy.Text = (sbSensitivity.Value - 50).ToString();
 
-            sbSmoothness.Value = (int)(Smoothness * 100);
-            txtSmoothness.Text = Smoothness.ToString();
+            sbSmoothness.Value = (int)(setup[CurrentSetupIndex].Smoothness * 100);
+            txtSmoothness.Text = setup[CurrentSetupIndex].Smoothness.ToString();
 
-            sbRed.Value = RedValue;
-            sbGreen.Value = GreenValue;
-            sbBlue.Value = BlueValue;
+            sbRed.Value = setup[CurrentSetupIndex].RedValue;
+            sbGreen.Value = setup[CurrentSetupIndex].GreenValue;
+            sbBlue.Value = setup[CurrentSetupIndex].BlueValue;
 
             tbLeftDial.Text = (LeftDialNr + 1).ToString();
             tbRightDial.Text = (RightDialNr + 1).ToString();
@@ -105,57 +110,72 @@ namespace VU1_Control
             tbLeftCalibration.Text = LeftCalibrateValue.ToString();
             tbRightCalibration.Text = RightCalibrateValue.ToString();
 
-            if (SelectedInput == 1)
-            {
-                cbOutputs.SelectedIndex = -1;
-                cbInputs.SelectedIndex = SelectedDeviceIdx;
-            }
-            else
-            {
-                cbOutputs.SelectedIndex = SelectedDeviceIdx;
-                cbInputs.SelectedIndex = -1;
-            }
+            cbOutputs.SelectedIndex = setup[CurrentSetupIndex].SelectedDeviceIdx;
 
+            tbAutoOffTime.Text = AutoOffTimeout.ToString();
+            cbAutoSwitch.Checked = AutoSwitch;
+            tbAutoSwitchPerc.Text = setup[CurrentSetupIndex].AutoSwitchThreshold.ToString();
         }
 
         private void ReadFromRegistry()
         {
-            RegKey = Registry.CurrentUser.CreateSubKey(@"SOFTWARE\VU1_Control");
+            RegistryKey regKey = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\VU1_Control");
 
-            RedValue = (int)RegKey.GetValue("Red", 0);
-            GreenValue = (int)RegKey.GetValue("Green", 0);
-            BlueValue = (int)RegKey.GetValue("Blue", 0);
+            for (int i = 0; i < NR_SETUP; i++)
+            {
+                setup[i] = new Setup
+                {
+                    RedValue = (int)regKey.GetValue("Red" + i, 0),
+                    GreenValue = (int)regKey.GetValue("Green" + i, 0),
+                    BlueValue = (int)regKey.GetValue("Blue" + i, 0),
 
-            Sensitivity = (int)RegKey.GetValue("Sensitivity", 50) / 50.0;
-            Smoothness = (int)RegKey.GetValue("Smoothness", 20) / 100.0;
+                    Sensitivity = (int)regKey.GetValue("Sensitivity" + i, 50) / 50.0,
+                    Smoothness = (int)regKey.GetValue("Smoothness" + i, 20) / 100.0,
 
-            SelectedDeviceIdx = (int)RegKey.GetValue("SelectedIndex", -1);
-            SelectedInput = (int)RegKey.GetValue("SelectedInput", -1);
+                    SelectedDeviceIdx = (int)regKey.GetValue("SelectedIndex" + i, -1),
+                    AutoSwitchThreshold = (int)regKey.GetValue("AutoSwitchThreshold" + i, 0)
+            };
+            }
 
-            LeftDialNr = (int)RegKey.GetValue("LeftDialNr", 0);
-            RightDialNr = (int)RegKey.GetValue("RightDialNr", 1);
+            LeftDialNr = (int)regKey.GetValue("LeftDialNr", 0);
+            RightDialNr = (int)regKey.GetValue("RightDialNr", 1);
 
-            LeftCalibrateValue = (int)RegKey.GetValue("LeftCalibrate", 0);
-            RightCalibrateValue = (int)RegKey.GetValue("RightCalibrate", 0);
+            LeftCalibrateValue = (int)regKey.GetValue("LeftCalibrate", 0);
+            RightCalibrateValue = (int)regKey.GetValue("RightCalibrate", 0);
+
+            AutoOffTimeout = (int)regKey.GetValue("AutoOffTimeout", 10);
+            AutoSwitch = ((int)regKey.GetValue("AutoSwitch", 1)) == 1 ? true : false;
+            
+            regKey.Close();
         }
 
         private void WriteToRegistry()
         {
-            RegKey.SetValue("Red", RedValue);
-            RegKey.SetValue("Green", GreenValue);
-            RegKey.SetValue("Blue", BlueValue);
+            RegistryKey regKey = Registry.CurrentUser.CreateSubKey(@"SOFTWARE\VU1_Control");
 
-            RegKey.SetValue("Sensitivity", (int)(Sensitivity * 50));
-            RegKey.SetValue("Smoothness", (int)(Smoothness * 100));
+            for (int i = 0; i < NR_SETUP; i++)
+            {
+                regKey.SetValue("Red" + i, setup[i].RedValue);
+                regKey.SetValue("Green" + i, setup[i].GreenValue);
+                regKey.SetValue("Blue" + i, setup[i].BlueValue);
 
-            RegKey.SetValue("SelectedIndex", SelectedDeviceIdx);
-            RegKey.SetValue("SelectedInput", SelectedInput);
+                regKey.SetValue("Sensitivity" + i, (int)(setup[i].Sensitivity * 50));
+                regKey.SetValue("Smoothness" + i, (int)(setup[i].Smoothness * 100));
 
-            RegKey.SetValue("LeftDialNr", LeftDialNr);
-            RegKey.SetValue("RightDialNr", RightDialNr);
+                regKey.SetValue("SelectedIndex" + i, setup[i].SelectedDeviceIdx);
+                regKey.SetValue("AutoSwitchThreshold" + i, setup[i].AutoSwitchThreshold);
+            }
 
-            RegKey.SetValue("LeftCalibrate", LeftCalibrateValue);
-            RegKey.SetValue("RightCalibrate", RightCalibrateValue);
+            regKey.SetValue("LeftDialNr", LeftDialNr);
+            regKey.SetValue("RightDialNr", RightDialNr);
+
+            regKey.SetValue("LeftCalibrate", LeftCalibrateValue);
+            regKey.SetValue("RightCalibrate", RightCalibrateValue);
+
+            regKey.SetValue("AutoOffTimeout", AutoOffTimeout);
+            regKey.SetValue("AutoSwitch", AutoSwitch ? 1 : 0);
+            
+            regKey.Close();
         }
 
 
@@ -257,12 +277,7 @@ namespace VU1_Control
                         }
                     }
                 }
-                //else
-                //{
-                //    Debug("  FindVUMeters : incorrect vid or pid or description empty -- skip");
-                //}
             }
-
             return false;
         }
 
@@ -270,39 +285,81 @@ namespace VU1_Control
         private void FillInputSelector()
         {
             Debug("Input selectors fill");
-            for (int i = 0; i < NAudio.Wave.WaveIn.DeviceCount; i++)
-            {
-                var caps = NAudio.Wave.WaveIn.GetCapabilities(i);
-                cbInputs.Items.Add(caps.ProductName);
-                Debug("  found audio input device " + caps.ProductName);
-            }
+            AudioDevice device;
 
+            cbOutputs.Items.Clear();
             for (int i = 0; i < NAudio.Wave.WaveOut.DeviceCount; i++)
             {
                 var caps = NAudio.Wave.WaveOut.GetCapabilities(i);
-                cbOutputs.Items.Add(caps.ProductName);
+                cbOutputs.Items.Add("Output: " + caps.ProductName);
+                device = new AudioDevice(caps.ProductName, false);
+                AudioDeviceList.Add(device);
                 Debug("  found audio output device " + caps.ProductName);
+            }
+
+            for (int i = 0; i < NAudio.Wave.WaveIn.DeviceCount; i++)
+            {
+                var caps = NAudio.Wave.WaveIn.GetCapabilities(i);
+                cbOutputs.Items.Add("Input: " + caps.ProductName);
+                device = new AudioDevice(caps.ProductName, true);
+                AudioDeviceList.Add(device);
+                Debug("  found audio input device " + caps.ProductName);
             }
         }
 
-        private void resetDevice(int Index, bool input)
+        private void InitAudioDevices()
         {
-            if (waveIn != null) waveIn.Dispose();
-            if (loopback_capture != null) loopback_capture.Dispose();
-            waveIn = null;
-            loopback_capture = null;
-
-            if (input)
+            for (int i = 0; i < NR_SETUP; i++)
             {
-                waveIn = new NAudio.Wave.WaveInEvent
+                resetDevice(i);
+            }
+            for (int i = 0; i < NR_SETUP; i++)
+            {
+                handleStartStop(i, true);
+            }
+        }
+
+
+        private void CheckInputsForAudio()
+        {
+            for (int i = 0; i < NR_SETUP; i++)
+            {
+                if (setup[i].SelectedDeviceIdx >= 0 && (setup[i].MaxLeftValueInt > 0 || setup[i].MaxRightValueInt > 0))
                 {
-                    DeviceNumber = Index, // indicates which microphone to use
+                    CurrentSetupIndex = i;
+                    ResetDeviceNeeded = true;
+                    zeroFound = false;
+                    zeroTimeoutStarted = false;
+                    SetColor();
+                    break;
+                }
+            }
+        }
+
+
+
+        private void resetDevice(int SetupIndex)
+        {
+            int deviceIndex = setup[SetupIndex].SelectedDeviceIdx;
+
+            if (deviceIndex < 0) return;
+
+            if (setup[SetupIndex].waveIn != null) setup[SetupIndex].waveIn.Dispose();
+            if (setup[SetupIndex].loopback_capture != null) setup[SetupIndex].loopback_capture.Dispose();
+            setup[SetupIndex].waveIn = null;
+            setup[SetupIndex].loopback_capture = null;
+
+            if (AudioDeviceList[deviceIndex].isInput)
+            {
+                setup[SetupIndex].waveIn = new NAudio.Wave.WaveInEvent
+                {
+                    DeviceNumber = deviceIndex - NAudio.Wave.WaveOut.DeviceCount, // indicates which microphone to use 
                     WaveFormat = new NAudio.Wave.WaveFormat(rate: 22050, bits: 16, channels: 2),
                     BufferMilliseconds = 100
                 };
-                waveIn.DataAvailable += WaveIn_DataAvailable;
+                setup[SetupIndex].waveIn.DataAvailable += (object2, sender2) => WaveIn_DataAvailable(object2, sender2, SetupIndex);
 
-                var caps = NAudio.Wave.WaveIn.GetCapabilities(Index);
+                var caps = NAudio.Wave.WaveIn.GetCapabilities(deviceIndex - NAudio.Wave.WaveOut.DeviceCount);
                 Debug("Listening to input device " + caps.ProductName);
             }
             else
@@ -311,19 +368,11 @@ namespace VU1_Control
                 {
                     MMDeviceEnumerator enumerator = new MMDeviceEnumerator();
                     //here I see my sound card
-                    var mm_dev = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)[Index];
+                    var mm_dev = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)[deviceIndex];
 
+                    setup[SetupIndex].loopback_capture = new WasapiLoopbackCapture(mm_dev);
+                    setup[SetupIndex].loopback_capture.DataAvailable += (object2, sender2) => Loopback_capture_DataAvailable(object2, sender2, SetupIndex);
 
-                    loopback_capture = new WasapiLoopbackCapture(mm_dev);
-                    loopback_capture.DataAvailable += Loopback_capture_DataAvailable;
-
-                    //loopback_capture.RecordingStopped += (sender, args) =>
-                    //{
-                    //    Debug("Recording stopped event.");
-                    //    loopback_capture.Dispose();
-                    //    loopback_capture = null;
-                    //    ResetDeviceNeeded = true;
-                    //};
                     Debug("Listening to output device " + mm_dev.DeviceFriendlyName);
                 }
                 catch (Exception ex)
@@ -335,7 +384,7 @@ namespace VU1_Control
 
         private void btnStart_Click(object sender, EventArgs e)
         {
-            handleStartStop(!running);
+            handleStartStop(CurrentSetupIndex, !running);
 
             if (!running)
             {
@@ -347,52 +396,53 @@ namespace VU1_Control
             }
         }
 
-        private void handleStartStop(bool run)
+        private void handleStartStop(int SetupIndex, bool run)
         {
-            if (waveIn != null)
+            try
             {
-                if (run)
+                if (setup[SetupIndex].waveIn != null)
                 {
-                    waveIn.StartRecording();
+                    if (run)
+                    {
+                        setup[SetupIndex].waveIn.StartRecording();
+                    }
+                    else
+                    {
+                        setup[SetupIndex].waveIn.StopRecording();
+                    }
+                    running = run;
                 }
-                else
+                else if (setup[SetupIndex].loopback_capture != null)
                 {
-                    waveIn.StopRecording();
+                    if (run)
+                    {
+                        setup[SetupIndex].loopback_capture.StartRecording();
+                    }
+                    else
+                    {
+                        setup[SetupIndex].loopback_capture.StopRecording();
+                    }
+                    running = run;
                 }
-                running = run;
             }
-            if (loopback_capture != null)
-            {
-                if (run)
-                {
-                    loopback_capture.StartRecording();
-                }
-                else
-                {
-                    loopback_capture.StopRecording();
-                }
-                running = run;
-            }
+            catch{ }
+
             if (!running)
             {
                 SetVUMeterValues(0, 0);
             }
         }
 
-        //        static int dCnt = 0;
-
+       
         // WaveIn_DataAvailable: Event handler that gets called when audio is available from the input device (like a microphone).
 
-        private void WaveIn_DataAvailable(object sender, NAudio.Wave.WaveInEventArgs e)
+        private void WaveIn_DataAvailable(object sender, NAudio.Wave.WaveInEventArgs e, int SetupIndex)
         {
             if (e.BytesRecorded == 0) return;
-
-            int bytesPerSample = waveIn.WaveFormat.BitsPerSample / 8;
+            
+            int bytesPerSample = ((WaveInEvent)sender).WaveFormat.BitsPerSample / 8;
             int samplesRecorded = e.BytesRecorded / bytesPerSample;
             int leftValue = 0, rightValue = 0;
-
-            //if (dCnt % 100 == 0) { Debug("In:" + e.BytesRecorded.ToString() + " byte");  }
-            //dCnt++;
 
             for (int indexSample = 0; indexSample < samplesRecorded; indexSample += 2)
             {
@@ -406,19 +456,19 @@ namespace VU1_Control
                     leftValue = BitConverter.ToInt32(e.Buffer, indexSample * bytesPerSample);
                     rightValue = BitConverter.ToInt32(e.Buffer, (indexSample + 1) * bytesPerSample);
                 }
-                MaxLeftValueInt = Math.Max(MaxLeftValueInt, Math.Abs((int)(leftValue / 327.68)));
-                MaxRightValueInt = Math.Max(MaxRightValueInt, Math.Abs((int)(rightValue / 327.68)));
+                setup[SetupIndex].MaxLeftValueInt = Math.Max(setup[SetupIndex].MaxLeftValueInt, Math.Abs((int)(leftValue / 327.68)));
+                setup[SetupIndex].MaxRightValueInt = Math.Max(setup[SetupIndex].MaxRightValueInt, Math.Abs((int)(rightValue / 327.68)));
             }
         }
 
 
         // Loopback_capture_DataAvailable: Event handler that gets called when audio is available from the output device.
 
-        private void Loopback_capture_DataAvailable(object sender, WaveInEventArgs e)
+        private void Loopback_capture_DataAvailable(object sender, WaveInEventArgs e, int SetupIndex)
         {
             if (e.BytesRecorded == 0) return;
 
-            int bytesPerSample = loopback_capture.WaveFormat.BitsPerSample / 8;
+            int bytesPerSample = setup[SetupIndex].loopback_capture.WaveFormat.BitsPerSample / 8;
             int samplesRecorded = e.BytesRecorded / bytesPerSample;
             
             for (int indexSample = 0; indexSample < samplesRecorded; indexSample += 2)
@@ -426,9 +476,9 @@ namespace VU1_Control
                 if (bytesPerSample == 4)
                 {
                     float value = BitConverter.ToSingle(e.Buffer, indexSample * bytesPerSample);
-                    MaxLeftValueInt = (int)Math.Max(MaxLeftValueInt, Math.Abs(value * 100.0F));
+                    setup[SetupIndex].MaxLeftValueInt = (int)Math.Max(setup[SetupIndex].MaxLeftValueInt, Math.Abs(value * 100.0F));
                     value = BitConverter.ToSingle(e.Buffer, (indexSample + 1) * bytesPerSample);
-                    MaxRightValueInt = (int)Math.Max(MaxRightValueInt, Math.Abs(value * 100.0F));
+                    setup[SetupIndex].MaxRightValueInt = (int)Math.Max(setup[SetupIndex].MaxRightValueInt, Math.Abs(value * 100.0F));
                 }
             }
 
@@ -447,28 +497,28 @@ namespace VU1_Control
                 if (ResetDeviceNeeded)
                 {
                     ResetDeviceNeeded = false;
-                    resetDevice(SelectedDeviceIdx, SelectedInput == 1);
-                    handleStartStop(running);
+                    resetDevice(CurrentSetupIndex);
+                    handleStartStop(CurrentSetupIndex, running);
                 }
 
                 if (running)
                 {
                     handleAutoOff();
 
-                    if (LastLeftValue != MaxLeftValueInt || LastRightValue != MaxRightValueInt)
+                    if (LastLeftValue != setup[CurrentSetupIndex].MaxLeftValueInt || LastRightValue != setup[CurrentSetupIndex].MaxRightValueInt)
                     {
                         //double newValueL = (Smoothness * LastLeftValue) + (1.0 - Smoothness) * (MaxLeftValueInt * MaxLeftValueInt);
                         //double newValueR = (Smoothness * LastRightValue) + (1.0 - Smoothness) * (MaxRightValueInt * MaxRightValueInt);
 
-                        double newValueL = LastLeftValue * Smoothness + MaxLeftValueInt * (1 - Smoothness);
-                        double newValueR = LastRightValue * Smoothness + MaxRightValueInt * (1 - Smoothness);
+                        double newValueL = LastLeftValue * setup[CurrentSetupIndex].Smoothness + setup[CurrentSetupIndex].MaxLeftValueInt * (1 - setup[CurrentSetupIndex].Smoothness);
+                        double newValueR = LastRightValue * setup[CurrentSetupIndex].Smoothness + setup[CurrentSetupIndex].MaxRightValueInt * (1 - setup[CurrentSetupIndex].Smoothness);
 
                         LastLeftValue = (int)(newValueL + 0.5);
                         LastRightValue = (int)(newValueR + 0.5);
 
                         SetVUMeterValues(LastLeftValue, LastRightValue);
                     }
-                    MaxLeftValueInt = MaxRightValueInt = 0;  // Reset max after use
+                    setup[CurrentSetupIndex].MaxLeftValueInt = setup[CurrentSetupIndex].MaxRightValueInt = 0;  // Reset max after use
                 }
                 Thread.Sleep(100);
             }
@@ -490,14 +540,14 @@ namespace VU1_Control
                 SP.Open();
             }
 
-            int db1 = (int)((50.0 * Math.Log10(value1)) * Sensitivity);
+            int db1 = (int)((50.0 * Math.Log10(value1)) * setup[CurrentSetupIndex].Sensitivity);
             if (db1 > 100) db1 = 100;
             else if (db1 < 0) db1 = 0;
             db1 += (LeftCalibrateValue * db1) / 100;
             if (db1 > 100) db1 = 100;
             else if (db1 < 0) db1 = 0;
 
-            int db2 = (int)((50.0 * Math.Log10(value2)) * Sensitivity);
+            int db2 = (int)((50.0 * Math.Log10(value2)) * setup[CurrentSetupIndex].Sensitivity);
             if (db2 > 100) db2 = 100;
             else if (db2 < 0) db2 = 0;
             db2 += (RightCalibrateValue * db2) / 100;
@@ -561,53 +611,49 @@ namespace VU1_Control
 
         private void handleAutoOff()
         {
-            if (MaxLeftValueInt == 0 && MaxRightValueInt == 0)
+            if (AutoSwitch && (DateTime.Now - lastAutoSwitchTime > TimeSpan.FromSeconds(AutoOffTimeout)))
             {
-                if (!zeroFound)
+                CheckInputsForAudio();
+                lastAutoSwitchTime = DateTime.Now;
+            }
+
+            if (AutoOffTimeout > 0)
+            {
+                if (setup[CurrentSetupIndex].MaxLeftValueInt < setup[CurrentSetupIndex].AutoSwitchThreshold && 
+                    setup[CurrentSetupIndex].MaxRightValueInt < setup[CurrentSetupIndex].AutoSwitchThreshold)
                 {
-                    zeroFound = true;
-                    firstZeroTime = DateTime.Now;
-                }
-                else if (!zeroTimeoutStarted)
-                {
-                    if (DateTime.Now - firstZeroTime > TimeSpan.FromSeconds(10))
+                    if (!zeroFound)
                     {
-                        zeroTimeoutStarted = true;
-                        SetColor(0, 0, 0);
+                        zeroFound = true;
+                        firstZeroTime = DateTime.Now;
+                    }
+                    else if (!zeroTimeoutStarted)
+                    {
+                        if (DateTime.Now - firstZeroTime > TimeSpan.FromSeconds(AutoOffTimeout))
+                        {
+                            zeroTimeoutStarted = true;
+                            SetColor(0, 0, 0);
+                        }
+                    }
+                }
+                else
+                {
+                    zeroFound = false;
+                    if (zeroTimeoutStarted)
+                    {
+                        zeroTimeoutStarted = false;
+                        SetColor();
                     }
                 }
             }
-            else
-            {
-                zeroFound = false;
-                if (zeroTimeoutStarted)
-                {
-                    zeroTimeoutStarted = false;
-                    //ResetDeviceNeeded = true;
-                    SetColor();
-                }
-            }
         }
 
-        private void cbInputs_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            if (cbInputs.SelectedIndex >= 0)
-            {
-                cbOutputs.SelectedIndex = -1;
-                SelectedDeviceIdx = cbInputs.SelectedIndex;
-                SelectedInput = 1;  // 0 = output, 1 = input
-                ResetDeviceNeeded = true;
-            }
-        }
-
-
+   
         private void cbOutputs_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (cbOutputs.SelectedIndex >= 0)
             {
-                cbInputs.SelectedIndex = -1;
-                SelectedDeviceIdx = cbOutputs.SelectedIndex;
-                SelectedInput = 0;  // 0 = output, 1 = input
+                setup[CurrentSetupIndex].SelectedDeviceIdx = cbOutputs.SelectedIndex;
                 ResetDeviceNeeded = true;
             }
         }
@@ -615,14 +661,14 @@ namespace VU1_Control
 
         private void sbSensitivity_Scroll(object sender, ScrollEventArgs e)
         {
-            Sensitivity = Math.Max(1, sbSensitivity.Value) / 50.0;
+            setup[CurrentSetupIndex].Sensitivity = Math.Max(1, sbSensitivity.Value) / 50.0;
             txtSensitiviy.Text = (sbSensitivity.Value - 50).ToString();
         }
 
         private void sbSmoothness_Scroll(object sender, ScrollEventArgs e)
         {
-            Smoothness = Math.Max(1, sbSmoothness.Value) / 100.0;
-            txtSmoothness.Text = Smoothness.ToString();
+            setup[CurrentSetupIndex].Smoothness = Math.Max(1, sbSmoothness.Value) / 100.0;
+            txtSmoothness.Text = setup[CurrentSetupIndex].Smoothness.ToString();
         }
 
         private void tbLeftDial_TextChanged(object sender, EventArgs e)
@@ -648,6 +694,8 @@ namespace VU1_Control
                 try
                 {
                     LeftCalibrateValue = int.Parse(tbLeftCalibration.Text);
+                    if (LeftCalibrateValue < -99) LeftCalibrateValue = -99;
+                    if (LeftCalibrateValue > 99) LeftCalibrateValue = 99;
                 }
                 catch { }
             }
@@ -661,6 +709,8 @@ namespace VU1_Control
                 try
                 {
                     RightCalibrateValue = int.Parse(tbRightCalibration.Text);
+                    if (RightCalibrateValue < -100) RightCalibrateValue = -100;
+                    if (RightCalibrateValue > 100) RightCalibrateValue = 100;
                 }
                 catch { }
             }
@@ -670,25 +720,25 @@ namespace VU1_Control
 
         private void sbRed_Scroll(object sender, ScrollEventArgs e)
         {
-            RedValue = sbRed.Value;
+            setup[CurrentSetupIndex].RedValue = sbRed.Value;
             SetColor();
         }
 
         private void sbGreen_Scroll(object sender, ScrollEventArgs e)
         {
-            GreenValue = sbGreen.Value;
+            setup[CurrentSetupIndex].GreenValue = sbGreen.Value;
             SetColor();
         }
 
         private void sbBlue_Scroll(object sender, ScrollEventArgs e)
         {
-            BlueValue = sbBlue.Value;
+            setup[CurrentSetupIndex].BlueValue = sbBlue.Value;
             SetColor();
         }
 
         private void SetColor()
         {
-            SetColor(RedValue, GreenValue, BlueValue);
+            SetColor(setup[CurrentSetupIndex].RedValue, setup[CurrentSetupIndex].GreenValue, setup[CurrentSetupIndex].BlueValue);
         }
 
         private void SetColor(int R, int G, int B)
@@ -779,6 +829,81 @@ namespace VU1_Control
             DebugStream.WriteLine(DateTime.Now + ": " + Message);
             DebugStream.Flush();
         }
+
+        private void btnSetup1_Click(object sender, EventArgs e)
+        {
+            CurrentSetupIndex = 0;
+            UpdateUI();
+            SetColor();
+            btnSetup1.BackColor = Color.PaleGreen;
+            btnSetup2.BackColor = Color.WhiteSmoke;
+            btnSetup3.BackColor = Color.WhiteSmoke;
+        }
+
+        private void btnSetup2_Click(object sender, EventArgs e)
+        {
+            CurrentSetupIndex = 1;
+            UpdateUI();
+            SetColor();
+            btnSetup1.BackColor = Color.WhiteSmoke;
+            btnSetup2.BackColor = Color.PaleGreen;
+            btnSetup3.BackColor = Color.WhiteSmoke;
+        }
+
+
+        private void btnSetup3_Click(object sender, EventArgs e)
+        {
+            CurrentSetupIndex = 2;
+            UpdateUI();
+            SetColor();
+            btnSetup1.BackColor = Color.WhiteSmoke;
+            btnSetup2.BackColor = Color.WhiteSmoke;
+            btnSetup3.BackColor = Color.PaleGreen;
+        }
+
+        private void tbAutoOffTime_TextChanged(object sender, EventArgs e)
+        {
+            if (tbAutoOffTime.Text.Length > 0)
+            {
+                try
+                {
+                    AutoOffTimeout = int.Parse(tbAutoOffTime.Text);
+                }
+                catch { }
+            }
+        }
+
+        private void tbAutoSwitchPerc_TextChanged(object sender, EventArgs e)
+        {
+            if (tbAutoSwitchPerc.Text.Length > 0)
+            {
+                try
+                {
+                    setup[CurrentSetupIndex].AutoSwitchThreshold = int.Parse(tbAutoSwitchPerc.Text);
+                }
+                catch { }
+            }
+        }
+
+        private void btnReset_Click(object sender, EventArgs e)
+        {
+            running = false;
+            ResetDeviceNeeded = true;
+            FillInputSelector();
+            if (!FindVUMeters())
+            {
+                MessageBox.Show("No VU meters found.");
+            }
+            CurrentSetupIndex = 0;
+            UpdateUI();
+            InitAudioDevices();
+            SP.Close();
+        }
+
+        private void cbAutoSwitch_CheckedChanged(object sender, EventArgs e)
+        {
+            AutoSwitch = cbAutoSwitch.Checked;
+        }
     }
 
     class ComPort // custom struct with our desired values
@@ -787,6 +912,38 @@ namespace VU1_Control
         public string vid;
         public string pid;
         public string description;
+    }
+
+    class AudioDevice
+    {
+        public string name;
+        public bool isInput;    // 1 if Windows audio input device, else output :-)
+
+        public AudioDevice(string productName, bool IsInput)
+        {
+            name = productName;
+            isInput = IsInput;
+        }
+    }
+
+    class Setup
+    {
+        public double Sensitivity { get; set; } = 1.0;
+        public double Smoothness { get; set; } = 0.2;
+
+        public int RedValue { get; set; }
+        public int GreenValue { get; set; }
+        public int BlueValue { get; set; }
+
+        public int SelectedDeviceIdx { get; set; } = -1;
+
+        public WaveInEvent waveIn;
+        public WasapiLoopbackCapture loopback_capture;
+
+        public int MaxLeftValueInt { get; set; }
+        public int MaxRightValueInt { get; set; }
+
+        public int AutoSwitchThreshold { get; set; } = 0;
     }
 }
 
