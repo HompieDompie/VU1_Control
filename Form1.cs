@@ -32,7 +32,7 @@ namespace VU1_Control
         SerialPort SP { get; set; }
         StreamWriter DebugStream;
         
-        DateTime firstZeroTime, lastAutoSwitchTime;
+        DateTime firstZeroTime, lastAutoSwitchTime, lastAutoSenseTime;
         bool zeroFound = false;
         bool zeroTimeoutStarted = false;
         MMDeviceCollection audioDevices;
@@ -63,6 +63,7 @@ namespace VU1_Control
 
             Task.Run(UpdateVU);
             Task.Run(CheckAutoSwitch);
+            Task.Run(CheckAutoSensitivity);
         }
 
         private void InitProgram()
@@ -124,9 +125,8 @@ namespace VU1_Control
             cbAutoSwitch.Checked = AutoSwitch;
             tbAutoSwitchPerc.Text = setup[CurrentSetupIndex].AutoSwitchThreshold.ToString();
 
-            cbAutoScale.Checked = setup[CurrentSetupIndex].AutoScale;
-            tbAutoScaleTime.Text = setup[CurrentSetupIndex].AutoScaleTime.ToString();  
-
+            cbAutoSensitivity.Checked = setup[CurrentSetupIndex].AutoSensitivity;
+            tbAutoSensitivityTime.Text = setup[CurrentSetupIndex].AutoSensitivityTime.ToString();  
         }
 
         private void ReadFromRegistry()
@@ -147,9 +147,10 @@ namespace VU1_Control
                     SelectedDeviceIdx = (int)regKey.GetValue("SelectedIndex" + i, -1),
                     AutoSwitchThreshold = (int)regKey.GetValue("AutoSwitchThreshold" + i, 0),
 
-                    AutoScale = (int)regKey.GetValue("AutoScale" + i, 0) == 1,
-                    AutoScaleTime = (int)regKey.GetValue("AutoScaleTime" + i, 60)
+                    AutoSensitivity = (int)regKey.GetValue("AutoSensitivity" + i, 0) == 1,
+                    AutoSensitivityTime = (int)regKey.GetValue("AutoSensitivityTime" + i, 60)
                 };
+                setup[i].OriginalSensitivity = setup[i].Sensitivity;
             }
 
             LeftDialNr = (int)regKey.GetValue("LeftDialNr", 0);
@@ -180,8 +181,8 @@ namespace VU1_Control
                 regKey.SetValue("SelectedIndex" + i, setup[i].SelectedDeviceIdx);
                 regKey.SetValue("AutoSwitchThreshold" + i, setup[i].AutoSwitchThreshold);
 
-                regKey.SetValue("AutoScale" + i, setup[i].AutoScale ? 1 : 0);
-                regKey.SetValue("AutoScaleTime" + i, (int)setup[i].AutoScaleTime);
+                regKey.SetValue("AutoSensitivity" + i, setup[i].AutoSensitivity ? 1 : 0);
+                regKey.SetValue("AutoSensitivityTime" + i, (int)setup[i].AutoSensitivityTime);
             }
 
             regKey.SetValue("LeftDialNr", LeftDialNr);
@@ -483,11 +484,11 @@ namespace VU1_Control
                 //}
 
                 setup[SetupIndex].MaxLeftValueInt = (int)Math.Max(setup[SetupIndex].MaxLeftValueInt, Math.Abs(leftValue * 100.0F));
-                setup[SetupIndex].MaxRightValueInt = (int)Math.Max(setup[SetupIndex].MaxLeftValueInt, Math.Abs(rightValue * 100.0F));
+                setup[SetupIndex].MaxRightValueInt = (int)Math.Max(setup[SetupIndex].MaxRightValueInt, Math.Abs(rightValue * 100.0F));
 
                 setup[SetupIndex].HasInput = setup[SetupIndex].MaxLeftValueInt >= setup[CurrentInputIndex].AutoSwitchThreshold ||
                                              setup[SetupIndex].MaxRightValueInt >= setup[CurrentInputIndex].AutoSwitchThreshold;
-            }
+             }
 
             //Debug("In:" + e.BytesRecorded.ToString() + " byte. L=" + MaxLeftValueInt.ToString() + " R=" + MaxRightValueInt.ToString() );
         }
@@ -548,6 +549,7 @@ namespace VU1_Control
             if (db1 > 100) db1 = 100;
             else if (db1 < 0) db1 = 0;
             db1 += (LeftCalibrateValue * db1) / 100;
+            setup[CurrentInputIndex].MaxAutoSenseValueInt = Math.Max(setup[CurrentInputIndex].MaxAutoSenseValueInt, db1);
             if (db1 > 100) db1 = 100;
             else if (db1 < 0) db1 = 0;
 
@@ -555,8 +557,10 @@ namespace VU1_Control
             if (db2 > 100) db2 = 100;
             else if (db2 < 0) db2 = 0;
             db2 += (RightCalibrateValue * db2) / 100;
+            setup[CurrentInputIndex].MaxAutoSenseValueInt = Math.Max(setup[CurrentInputIndex].MaxAutoSenseValueInt, db2);
             if (db2 > 100) db2 = 100;
             else if (db2 < 0) db2 = 0;
+            
 
             string vu1 = ">030400020" + LeftDialNr.ToString();
             string vu2 = ">030400020" + RightDialNr.ToString();
@@ -664,6 +668,35 @@ namespace VU1_Control
             }
         }
 
+        private void CheckAutoSensitivity()
+        {
+            for (; ; )
+            {
+                try
+                {
+                    if (running && setup[CurrentInputIndex].AutoSensitivity && 
+                        (DateTime.Now - lastAutoSenseTime > TimeSpan.FromSeconds(setup[CurrentInputIndex].AutoSensitivityTime)))
+                    {
+                        if (setup[CurrentInputIndex].MaxAutoSenseValueInt > 0)
+                        {
+                            setup[CurrentInputIndex].Sensitivity *= 85.0 / setup[CurrentInputIndex].MaxAutoSenseValueInt;
+                            if (setup[CurrentInputIndex].Sensitivity < 0.01) setup[CurrentInputIndex].Sensitivity = 0.01;
+                            if (setup[CurrentInputIndex].Sensitivity > 2.0) setup[CurrentInputIndex].Sensitivity = 2.0;
+                        }
+                        else  //no input? Set back to setup value
+                        {
+                            setup[CurrentInputIndex].Sensitivity = setup[CurrentInputIndex].OriginalSensitivity;
+                        }
+                        setup[CurrentInputIndex].MaxAutoSenseValueInt = 0;
+                        lastAutoSenseTime = DateTime.Now;
+                    }
+                }
+                catch { }
+
+                Thread.Sleep(500);
+            }
+        }
+
 
 
         private void cbOutputs_SelectedIndexChanged(object sender, EventArgs e)
@@ -692,6 +725,8 @@ namespace VU1_Control
             if (tbLeftDial.Text.Length > 0)
             {
                 LeftDialNr = int.Parse(tbLeftDial.Text) - 1;
+                if (LeftDialNr < 0) LeftDialNr = 1;
+                if (LeftDialNr > 9) LeftDialNr = 9;
             }
         }
 
@@ -700,6 +735,8 @@ namespace VU1_Control
             if (tbRightDial.Text.Length > 0)
             {
                 RightDialNr = int.Parse(tbRightDial.Text) - 1;
+                if (RightDialNr < 0) RightDialNr = 1;
+                if (RightDialNr > 9) RightDialNr = 9;
             }
         }
 
@@ -898,18 +935,19 @@ namespace VU1_Control
             if (!(SP is null)) SP.Close();
         }
 
-        private void cbAutoScale_CheckedChanged(object sender, EventArgs e)
+        private void cbAutoSensitivity_CheckedChanged(object sender, EventArgs e)
         {
-            setup[CurrentSetupIndex].AutoScale = cbAutoScale.Checked;  
+            setup[CurrentSetupIndex].AutoSensitivity = cbAutoSensitivity.Checked;
+            sbSensitivity.Enabled = !cbAutoSensitivity.Checked;
         }
 
-        private void tbAutoScaleTime_TextChanged(object sender, EventArgs e)
+        private void tbAutoSensitivityTime_TextChanged(object sender, EventArgs e)
         {
-            if (tbAutoScaleTime.Text.Length > 0)
+            if (tbAutoSensitivityTime.Text.Length > 0)
             {
                 try
                 {
-                    setup[CurrentSetupIndex].AutoScaleTime = int.Parse(tbAutoScaleTime.Text);
+                    setup[CurrentSetupIndex].AutoSensitivityTime = int.Parse(tbAutoSensitivityTime.Text);
                 }
                 catch { }
             }
@@ -933,6 +971,7 @@ namespace VU1_Control
     class Setup
     {
         public double Sensitivity { get; set; } = 1.0;
+        public double OriginalSensitivity { get; set; } = 1.0;
         public double Smoothness { get; set; } = 0.2;
 
         public int RedValue { get; set; }
@@ -947,13 +986,15 @@ namespace VU1_Control
 
         public int MaxLeftValueInt { get; set; }
         public int MaxRightValueInt { get; set; }
+        public int MaxAutoSenseValueInt { get; set; }
+        
         public bool HasInput { get; set;}
 
         public int AutoSwitchThreshold { get; set; } = 0;
         public int BytesPerSample { get; set; } = 0;
 
-        public bool AutoScale { get; set; }
-        public int AutoScaleTime { get; set; } = 0;
+        public bool AutoSensitivity { get; set; }
+        public int AutoSensitivityTime { get; set; } = 0;
     }
 }
 

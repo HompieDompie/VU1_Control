@@ -52,9 +52,10 @@ namespace VU1_Control
             this.label13 = new System.Windows.Forms.Label();
             this.tbAutoOffTime = new System.Windows.Forms.TextBox();
             this.panSetup = new System.Windows.Forms.Panel();
+            this.label18 = new System.Windows.Forms.Label();
             this.label11 = new System.Windows.Forms.Label();
-            this.tbAutoScaleTime = new System.Windows.Forms.TextBox();
-            this.cbAutoScale = new System.Windows.Forms.CheckBox();
+            this.tbAutoSensitivityTime = new System.Windows.Forms.TextBox();
+            this.cbAutoSensitivity = new System.Windows.Forms.CheckBox();
             this.paColor = new System.Windows.Forms.Panel();
             this.label10 = new System.Windows.Forms.Label();
             this.cbOutputs = new System.Windows.Forms.ComboBox();
@@ -221,7 +222,6 @@ namespace VU1_Control
             this.tcSetup.Controls.Add(this.tabPage1);
             this.tcSetup.Controls.Add(this.tabPage2);
             this.tcSetup.Controls.Add(this.tabPage3);
-            this.tcSetup.Enabled = false;
             this.tcSetup.Location = new System.Drawing.Point(12, 45);
             this.tcSetup.Name = "tcSetup";
             this.tcSetup.SelectedIndex = 0;
@@ -299,9 +299,10 @@ namespace VU1_Control
             // 
             // panSetup
             // 
+            this.panSetup.Controls.Add(this.label18);
             this.panSetup.Controls.Add(this.label11);
-            this.panSetup.Controls.Add(this.tbAutoScaleTime);
-            this.panSetup.Controls.Add(this.cbAutoScale);
+            this.panSetup.Controls.Add(this.tbAutoSensitivityTime);
+            this.panSetup.Controls.Add(this.cbAutoSensitivity);
             this.panSetup.Controls.Add(this.paColor);
             this.panSetup.Controls.Add(this.label10);
             this.panSetup.Controls.Add(this.cbOutputs);
@@ -322,41 +323,47 @@ namespace VU1_Control
             this.panSetup.Controls.Add(this.sbSmoothness);
             this.panSetup.Location = new System.Drawing.Point(14, 67);
             this.panSetup.Name = "panSetup";
-            this.panSetup.Size = new System.Drawing.Size(362, 247);
+            this.panSetup.Size = new System.Drawing.Size(363, 250);
             this.panSetup.TabIndex = 56;
+            // 
+            // label18
+            // 
+            this.label18.AutoSize = true;
+            this.label18.Location = new System.Drawing.Point(240, 214);
+            this.label18.Name = "label18";
+            this.label18.Size = new System.Drawing.Size(12, 13);
+            this.label18.TabIndex = 82;
+            this.label18.Text = "s";
             // 
             // label11
             // 
             this.label11.AutoSize = true;
-            this.label11.Enabled = false;
             this.label11.Location = new System.Drawing.Point(134, 214);
             this.label11.Name = "label11";
-            this.label11.Size = new System.Drawing.Size(79, 13);
+            this.label11.Size = new System.Drawing.Size(63, 13);
             this.label11.TabIndex = 81;
-            this.label11.Text = "Auto scale time";
+            this.label11.Text = "Time Period";
             // 
-            // tbAutoScaleTime
+            // tbAutoSensitivityTime
             // 
-            this.tbAutoScaleTime.BackColor = System.Drawing.Color.WhiteSmoke;
-            this.tbAutoScaleTime.Enabled = false;
-            this.tbAutoScaleTime.Location = new System.Drawing.Point(219, 211);
-            this.tbAutoScaleTime.MaxLength = 3;
-            this.tbAutoScaleTime.Name = "tbAutoScaleTime";
-            this.tbAutoScaleTime.Size = new System.Drawing.Size(36, 20);
-            this.tbAutoScaleTime.TabIndex = 80;
-            this.tbAutoScaleTime.TextChanged += new System.EventHandler(this.tbAutoScaleTime_TextChanged);
+            this.tbAutoSensitivityTime.BackColor = System.Drawing.Color.WhiteSmoke;
+            this.tbAutoSensitivityTime.Location = new System.Drawing.Point(203, 211);
+            this.tbAutoSensitivityTime.MaxLength = 3;
+            this.tbAutoSensitivityTime.Name = "tbAutoSensitivityTime";
+            this.tbAutoSensitivityTime.Size = new System.Drawing.Size(36, 20);
+            this.tbAutoSensitivityTime.TabIndex = 80;
+            this.tbAutoSensitivityTime.TextChanged += new System.EventHandler(this.tbAutoSensitivityTime_TextChanged);
             // 
-            // cbAutoScale
+            // cbAutoSensitivity
             // 
-            this.cbAutoScale.CheckAlign = System.Drawing.ContentAlignment.MiddleRight;
-            this.cbAutoScale.Enabled = false;
-            this.cbAutoScale.Location = new System.Drawing.Point(12, 213);
-            this.cbAutoScale.Name = "cbAutoScale";
-            this.cbAutoScale.Size = new System.Drawing.Size(86, 17);
-            this.cbAutoScale.TabIndex = 79;
-            this.cbAutoScale.Text = "Auto scale";
-            this.cbAutoScale.UseVisualStyleBackColor = true;
-            this.cbAutoScale.CheckedChanged += new System.EventHandler(this.cbAutoScale_CheckedChanged);
+            this.cbAutoSensitivity.CheckAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.cbAutoSensitivity.Location = new System.Drawing.Point(12, 213);
+            this.cbAutoSensitivity.Name = "cbAutoSensitivity";
+            this.cbAutoSensitivity.Size = new System.Drawing.Size(106, 17);
+            this.cbAutoSensitivity.TabIndex = 79;
+            this.cbAutoSensitivity.Text = "Auto Sensitivity";
+            this.cbAutoSensitivity.UseVisualStyleBackColor = true;
+            this.cbAutoSensitivity.CheckedChanged += new System.EventHandler(this.cbAutoSensitivity_CheckedChanged);
             // 
             // paColor
             // 
@@ -602,8 +609,9 @@ namespace VU1_Control
         private System.Windows.Forms.HScrollBar sbSmoothness;
         private System.Windows.Forms.Panel paColor;
         private System.Windows.Forms.Label label11;
-        private System.Windows.Forms.TextBox tbAutoScaleTime;
-        private System.Windows.Forms.CheckBox cbAutoScale;
+        private System.Windows.Forms.TextBox tbAutoSensitivityTime;
+        private System.Windows.Forms.CheckBox cbAutoSensitivity;
+        private System.Windows.Forms.Label label18;
     }
 }
 
