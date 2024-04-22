@@ -78,13 +78,18 @@ namespace VU1_Control
             ReadFromRegistry();
             CurrentSetupIndex = CurrentInputIndex = 0;    // 1st setup takes preference on startup
 
-            SetEasing(true, 100, 1);
-            SetEasing(false, 30, 500);
+            InitMeters();
             UpdateUI();
             SetVUMeterValues(0, 0);
             SetSetupColor();
 
             InitAudioDevices();
+        }
+
+        private void InitMeters()
+        {
+            SetEasing(true, 100, 1);
+            SetEasing(false, 30, 500);
         }
 
 
@@ -212,10 +217,9 @@ namespace VU1_Control
             using (var searcher = new ManagementObjectSearcher
                 ("SELECT * FROM Win32_PnPEntity WHERE Name LIKE '%COM%' AND PNPClass = 'Ports'"))
             {
-                Debug("   Before ManagementBaseObject");
                 var ports = searcher.Get().Cast<ManagementBaseObject>().ToList();
 
-                Debug("  GetSerialPorts: found devices:  " + ports.Count.ToString());
+                Debug("   GetSerialPorts: found devices:  " + ports.Count.ToString());
                 foreach (ManagementBaseObject p in ports)
                 {
                     ComPort c = new ComPort();
@@ -300,7 +304,6 @@ namespace VU1_Control
             return false;
         }
 
- 
         private void FillInputSelector()
         {
             Debug("Input selectors fill");
@@ -538,12 +541,25 @@ namespace VU1_Control
                 return;
             }
 
-            SendSemaphore.WaitOne();
-
             if (!SP.IsOpen)
             {
-                SP.Open();
+                try
+                {
+                    SP.Open();
+                }
+                catch
+                {
+                    Thread.Sleep(1000);
+
+                    if (FindVUMeters())
+                    {
+                        InitMeters();
+                        SetSetupColor();
+                    }
+                }
             }
+
+            SendSemaphore.WaitOne();
 
             int db1 = (int)((50.0 * Math.Log10(value1)) * setup[CurrentInputIndex].Sensitivity);
             if (db1 > 100) db1 = 100;
@@ -698,7 +714,6 @@ namespace VU1_Control
         }
 
 
-
         private void cbOutputs_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (cbOutputs.SelectedIndex >= 0)
@@ -815,7 +830,13 @@ namespace VU1_Control
 
             if (!SP.IsOpen)
             {
-                SP.Open();
+                try { SP.Open(); }
+                catch
+                {
+                    running = wasRunning;
+                    SendSemaphore.Release();
+                    return;
+                }
             }
 
             // rgb ;  '>1303000500 1E322800'    '>1303000500 00640000'   1303000501 00006400

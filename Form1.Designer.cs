@@ -83,11 +83,11 @@ namespace VU1_Control
             // 
             this.label7.AutoSize = true;
             this.label7.Font = new System.Drawing.Font("Microsoft Sans Serif", 14.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.label7.Location = new System.Drawing.Point(68, 9);
+            this.label7.Location = new System.Drawing.Point(119, 9);
             this.label7.Name = "label7";
-            this.label7.Size = new System.Drawing.Size(257, 24);
+            this.label7.Size = new System.Drawing.Size(163, 24);
             this.label7.TabIndex = 17;
-            this.label7.Text = "Streacom VU1 Dial Control";
+            this.label7.Text = "VU1 Dial Control";
             // 
             // btnStart
             // 
