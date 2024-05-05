@@ -9,6 +9,7 @@ using System.IO;
 using System.IO.Ports;
 using System.Linq;
 using System.Management;
+using System.Runtime.CompilerServices;
 using System.Runtime.Remoting.Channels;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -84,6 +85,9 @@ namespace VU1_Control
             SetSetupColor();
 
             InitAudioDevices();
+
+            UITimer.Tick += UITimer_Elapsed;
+            UITimer.Start();
         }
 
         private void InitMeters()
@@ -100,6 +104,22 @@ namespace VU1_Control
             SetColor(0, 0, 0);
             SetVUMeterValues(0, 0);
             Thread.Sleep(500);
+        }
+
+        private void UITimer_Elapsed(Object myObject, EventArgs myEventArgs)
+        {
+            string input = "";
+
+            infoLabel.Items[0].Text = "Active: " + (CurrentInputIndex + 1);
+
+            for (int i = 0; i < NR_SETUP; i++)
+            {
+                if (setup[i].SelectedDeviceIdx >= 0)
+                {
+                    input += (i + 1).ToString() + " (" + setup[i].Sensitivity + " " + setup[i].HasInput + ") ";
+                }
+            }
+            infoLabel.Items[0].Text = "Input " + input + " Active: " + (CurrentInputIndex + 1);
         }
 
         private void UpdateUI()
@@ -304,6 +324,8 @@ namespace VU1_Control
             return false;
         }
 
+        // Fill the audio selector pulldown with the Windows audio device names
+
         private void FillInputSelector()
         {
             Debug("Input selectors fill");
@@ -350,6 +372,7 @@ namespace VU1_Control
             {
                 if (setup[i].SelectedDeviceIdx >= 0 && setup[i].HasInput) 
                 {
+                    setup[i].HasInput = false;
                     if (i != CurrentInputIndex)
                     {
                         CurrentInputIndex = i;

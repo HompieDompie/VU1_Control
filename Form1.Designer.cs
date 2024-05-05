@@ -29,6 +29,7 @@ namespace VU1_Control
         /// </summary>
         private void InitializeComponent()
         {
+            this.components = new System.ComponentModel.Container();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Form1));
             this.label7 = new System.Windows.Forms.Label();
             this.btnStart = new System.Windows.Forms.Button();
@@ -45,6 +46,7 @@ namespace VU1_Control
             this.btnReset = new System.Windows.Forms.Button();
             this.tcSetup = new System.Windows.Forms.TabControl();
             this.tabPage1 = new System.Windows.Forms.TabPage();
+            this.label19 = new System.Windows.Forms.Label();
             this.tabPage2 = new System.Windows.Forms.TabPage();
             this.tabPage3 = new System.Windows.Forms.TabPage();
             this.cbAutoSwitch = new System.Windows.Forms.CheckBox();
@@ -74,9 +76,14 @@ namespace VU1_Control
             this.sbGreen = new System.Windows.Forms.HScrollBar();
             this.sbRed = new System.Windows.Forms.HScrollBar();
             this.sbSmoothness = new System.Windows.Forms.HScrollBar();
+            this.UITimer = new System.Windows.Forms.Timer(this.components);
+            this.infoLabel = new System.Windows.Forms.StatusStrip();
+            this.info1 = new System.Windows.Forms.ToolStripStatusLabel();
             this.groupBox3.SuspendLayout();
             this.tcSetup.SuspendLayout();
+            this.tabPage1.SuspendLayout();
             this.panSetup.SuspendLayout();
+            this.infoLabel.SuspendLayout();
             this.SuspendLayout();
             // 
             // label7
@@ -222,6 +229,7 @@ namespace VU1_Control
             this.tcSetup.Controls.Add(this.tabPage1);
             this.tcSetup.Controls.Add(this.tabPage2);
             this.tcSetup.Controls.Add(this.tabPage3);
+            this.tcSetup.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.tcSetup.Location = new System.Drawing.Point(12, 45);
             this.tcSetup.Name = "tcSetup";
             this.tcSetup.SelectedIndex = 0;
@@ -231,6 +239,7 @@ namespace VU1_Control
             // 
             // tabPage1
             // 
+            this.tabPage1.Controls.Add(this.label19);
             this.tabPage1.Location = new System.Drawing.Point(4, 22);
             this.tabPage1.Name = "tabPage1";
             this.tabPage1.Padding = new System.Windows.Forms.Padding(3);
@@ -238,6 +247,15 @@ namespace VU1_Control
             this.tabPage1.TabIndex = 0;
             this.tabPage1.Text = "Setup 1";
             this.tabPage1.UseVisualStyleBackColor = true;
+            // 
+            // label19
+            // 
+            this.label19.AutoSize = true;
+            this.label19.Location = new System.Drawing.Point(20, 53);
+            this.label19.Name = "label19";
+            this.label19.Size = new System.Drawing.Size(41, 13);
+            this.label19.TabIndex = 0;
+            this.label19.Text = "label19";
             // 
             // tabPage2
             // 
@@ -534,13 +552,39 @@ namespace VU1_Control
             this.sbSmoothness.Value = 1;
             this.sbSmoothness.Scroll += new System.Windows.Forms.ScrollEventHandler(this.sbSmoothness_Scroll);
             // 
+            // UITimer
+            // 
+            this.UITimer.Enabled = true;
+            this.UITimer.Interval = 1000;
+            // 
+            // infoLabel
+            // 
+            this.infoLabel.BackColor = System.Drawing.Color.WhiteSmoke;
+            this.infoLabel.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.info1});
+            this.infoLabel.Location = new System.Drawing.Point(0, 430);
+            this.infoLabel.Name = "infoLabel";
+            this.infoLabel.Size = new System.Drawing.Size(393, 22);
+            this.infoLabel.SizingGrip = false;
+            this.infoLabel.TabIndex = 58;
+            this.infoLabel.Text = "statusStrip1";
+            // 
+            // info1
+            // 
+            this.info1.BackColor = System.Drawing.Color.WhiteSmoke;
+            this.info1.Margin = new System.Windows.Forms.Padding(4, 3, 0, 2);
+            this.info1.Name = "info1";
+            this.info1.Size = new System.Drawing.Size(118, 17);
+            this.info1.Text = "toolStripStatusLabel1";
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.Color.White;
             this.BackgroundImageLayout = System.Windows.Forms.ImageLayout.None;
-            this.ClientSize = new System.Drawing.Size(393, 436);
+            this.ClientSize = new System.Drawing.Size(393, 452);
+            this.Controls.Add(this.infoLabel);
             this.Controls.Add(this.panSetup);
             this.Controls.Add(this.cbAutoSwitch);
             this.Controls.Add(this.label14);
@@ -560,8 +604,12 @@ namespace VU1_Control
             this.groupBox3.ResumeLayout(false);
             this.groupBox3.PerformLayout();
             this.tcSetup.ResumeLayout(false);
+            this.tabPage1.ResumeLayout(false);
+            this.tabPage1.PerformLayout();
             this.panSetup.ResumeLayout(false);
             this.panSetup.PerformLayout();
+            this.infoLabel.ResumeLayout(false);
+            this.infoLabel.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -612,6 +660,10 @@ namespace VU1_Control
         private System.Windows.Forms.TextBox tbAutoSensitivityTime;
         private System.Windows.Forms.CheckBox cbAutoSensitivity;
         private System.Windows.Forms.Label label18;
+        private System.Windows.Forms.Timer UITimer;
+        private System.Windows.Forms.Label label19;
+        private System.Windows.Forms.StatusStrip infoLabel;
+        private System.Windows.Forms.ToolStripStatusLabel info1;
     }
 }
 
