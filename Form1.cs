@@ -409,12 +409,14 @@ namespace VU1_Control
                 {
                     setup[SetupIndex].loopback_capture = new WasapiLoopbackCapture(mm_dev);
                     setup[SetupIndex].loopback_capture.DataAvailable += (object2, sender2) => Loopback_capture_DataAvailable(object2, sender2, SetupIndex);
+                    setup[SetupIndex].loopback_capture.RecordingStopped += (object2, sender2) => Loopback_capture_RecordingStopped(object2, sender2, SetupIndex);
                     setup[SetupIndex].BytesPerSample = setup[SetupIndex].loopback_capture.WaveFormat.BitsPerSample / 8;
                 }
                 else
                 {
                     setup[SetupIndex].capture = new WasapiCapture(mm_dev);
                     setup[SetupIndex].capture.DataAvailable += (object2, sender2) => Loopback_capture_DataAvailable(object2, sender2, SetupIndex);
+                    setup[SetupIndex].capture.RecordingStopped += (object2, sender2) => Loopback_capture_RecordingStopped(object2, sender2, SetupIndex);
                     setup[SetupIndex].BytesPerSample = setup[SetupIndex].capture.WaveFormat.BitsPerSample / 8;
                 }
 
@@ -480,9 +482,9 @@ namespace VU1_Control
             }
         }
 
-       
-        // Loopback_capture_DataAvailable: Event handler that gets called when audio is available from the input or output device.
 
+        // Loopback_capture_DataAvailable: Event handler that gets called when audio is available from the input or output device.
+        
         private void Loopback_capture_DataAvailable(object sender, WaveInEventArgs e, int SetupIndex)
         {
             float leftValue = 0, rightValue = 0;
@@ -519,7 +521,12 @@ namespace VU1_Control
             //Debug("In:" + e.BytesRecorded.ToString() + " byte. L=" + MaxLeftValueInt.ToString() + " R=" + MaxRightValueInt.ToString() );
         }
 
-        
+        private void Loopback_capture_RecordingStopped(object sender, NAudio.Wave.StoppedEventArgs e, int SetupIndex)
+        {
+            setup[SetupIndex].HasInput = false;
+            setup[SetupIndex].MaxLeftValueInt = 0;
+            setup[SetupIndex].MaxRightValueInt = 0;
+        }
 
         private int LastLeftValue = -1;
         private int LastRightValue = -1;
@@ -584,22 +591,34 @@ namespace VU1_Control
 
             SendSemaphore.WaitOne();
 
+            bool upd = false;
             int db1 = (int)((50.0 * Math.Log10(value1)) * setup[CurrentInputIndex].Sensitivity);
-            if (db1 > 100) db1 = 100;
-            else if (db1 < 0) db1 = 0;
+            //if (db1 > 100) db1 = 100;
+            //else if (db1 < 0) db1 = 0;
             db1 += (LeftCalibrateValue * db1) / 100;
-            setup[CurrentInputIndex].MaxAutoSenseValueInt = Math.Max(setup[CurrentInputIndex].MaxAutoSenseValueInt, db1);
+            if (db1 > setup[CurrentInputIndex].MaxAutoSenseValueInt)
+            {
+                setup[CurrentInputIndex].MaxAutoSenseValueInt = db1;
+                upd = true;
+            }
             if (db1 > 100) db1 = 100;
             else if (db1 < 0) db1 = 0;
 
             int db2 = (int)((50.0 * Math.Log10(value2)) * setup[CurrentInputIndex].Sensitivity);
-            if (db2 > 100) db2 = 100;
-            else if (db2 < 0) db2 = 0;
+            //if (db2 > 100) db2 = 100;
+            //else if (db2 < 0) db2 = 0;
             db2 += (RightCalibrateValue * db2) / 100;
-            setup[CurrentInputIndex].MaxAutoSenseValueInt = Math.Max(setup[CurrentInputIndex].MaxAutoSenseValueInt, db2);
+            if (db2 > setup[CurrentInputIndex].MaxAutoSenseValueInt)
+            {
+                setup[CurrentInputIndex].MaxAutoSenseValueInt = db2;
+                upd = true;
+            }
             if (db2 > 100) db2 = 100;
             else if (db2 < 0) db2 = 0;
-            
+            if (upd)
+            {
+                doCheckAutoSensitivity();
+            }
 
             string vu1 = ">030400020" + LeftDialNr.ToString();
             string vu2 = ">030400020" + RightDialNr.ToString();
@@ -716,16 +735,7 @@ namespace VU1_Control
                     if (running && setup[CurrentInputIndex].AutoSensitivity && 
                         (DateTime.Now - lastAutoSenseTime > TimeSpan.FromSeconds(setup[CurrentInputIndex].AutoSensitivityTime)))
                     {
-                        if (setup[CurrentInputIndex].MaxAutoSenseValueInt > 0)
-                        {
-                            setup[CurrentInputIndex].Sensitivity *= 85.0 / setup[CurrentInputIndex].MaxAutoSenseValueInt;
-                            if (setup[CurrentInputIndex].Sensitivity < 0.01) setup[CurrentInputIndex].Sensitivity = 0.01;
-                            if (setup[CurrentInputIndex].Sensitivity > 2.0) setup[CurrentInputIndex].Sensitivity = 2.0;
-                        }
-                        else  //no input? Set back to setup value
-                        {
-                            setup[CurrentInputIndex].Sensitivity = setup[CurrentInputIndex].OriginalSensitivity;
-                        }
+                        doCheckAutoSensitivity();
                         setup[CurrentInputIndex].MaxAutoSenseValueInt = 0;
                         lastAutoSenseTime = DateTime.Now;
                     }
@@ -734,6 +744,21 @@ namespace VU1_Control
 
                 Thread.Sleep(500);
             }
+        }
+
+        private void doCheckAutoSensitivity()
+        {
+            if (setup[CurrentInputIndex].MaxAutoSenseValueInt > 0)
+            {
+                setup[CurrentInputIndex].Sensitivity *= 85.0 / setup[CurrentInputIndex].MaxAutoSenseValueInt;
+                if (setup[CurrentInputIndex].Sensitivity < 0.01) setup[CurrentInputIndex].Sensitivity = 0.01;
+                if (setup[CurrentInputIndex].Sensitivity > 2.0) setup[CurrentInputIndex].Sensitivity = 2.0;
+            }
+            else  //no input? Set back to setup value
+            {
+                setup[CurrentInputIndex].Sensitivity = setup[CurrentInputIndex].OriginalSensitivity;
+            }
+            
         }
 
 
