@@ -493,6 +493,7 @@ namespace VU1_Control
             if (e.BytesRecorded == 0 || bytesPerSample == 0)
             {
                 setup[SetupIndex].HasInput = false;
+                //setup[SetupIndex].IsInputCandidate  = false;
                 return;
             }
 
@@ -514,8 +515,27 @@ namespace VU1_Control
                 setup[SetupIndex].MaxLeftValueInt = (int)Math.Max(setup[SetupIndex].MaxLeftValueInt, Math.Abs(leftValue * 100.0F));
                 setup[SetupIndex].MaxRightValueInt = (int)Math.Max(setup[SetupIndex].MaxRightValueInt, Math.Abs(rightValue * 100.0F));
 
-                setup[SetupIndex].HasInput = setup[SetupIndex].MaxLeftValueInt >= setup[CurrentInputIndex].AutoSwitchThreshold ||
-                                             setup[SetupIndex].MaxRightValueInt >= setup[CurrentInputIndex].AutoSwitchThreshold;
+                if (setup[SetupIndex].MaxLeftValueInt >= setup[CurrentInputIndex].AutoSwitchThreshold ||
+                                                 setup[SetupIndex].MaxRightValueInt >= setup[CurrentInputIndex].AutoSwitchThreshold)
+                {
+                    if (setup[SetupIndex].IsInputCandidate)
+                    {
+                        if (DateTime.Now - setup[SetupIndex].InputCandidateStart > TimeSpan.FromSeconds(1))
+                        {
+                            setup[SetupIndex].HasInput = true;
+                            setup[SetupIndex].IsInputCandidate = false;
+                        }
+                    }
+                    else
+                    {
+                        setup[SetupIndex].IsInputCandidate = true;
+                        setup[SetupIndex].InputCandidateStart = DateTime.Now;
+                    }
+                }
+                else
+                {
+                    setup[SetupIndex].IsInputCandidate = false;
+                }
              }
 
             //Debug("In:" + e.BytesRecorded.ToString() + " byte. L=" + MaxLeftValueInt.ToString() + " R=" + MaxRightValueInt.ToString() );
@@ -524,6 +544,8 @@ namespace VU1_Control
         private void Loopback_capture_RecordingStopped(object sender, NAudio.Wave.StoppedEventArgs e, int SetupIndex)
         {
             setup[SetupIndex].HasInput = false;
+            setup[SetupIndex].IsInputCandidate = false;
+            setup[SetupIndex].InputCandidateStart = DateTime.MinValue;
             setup[SetupIndex].MaxLeftValueInt = 0;
             setup[SetupIndex].MaxRightValueInt = 0;
         }
@@ -1058,6 +1080,8 @@ namespace VU1_Control
         public int MaxAutoSenseValueInt { get; set; }
         
         public bool HasInput { get; set;}
+        public bool IsInputCandidate { get; set; }
+        public DateTime InputCandidateStart { get; set; }
 
         public int AutoSwitchThreshold { get; set; } = 0;
         public int BytesPerSample { get; set; } = 0;
