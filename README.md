@@ -15,8 +15,10 @@ Features:
 - Auto detect of silence, the leds will turn off after 10 seconds.
   if input is detected again, leds will turn on.
 - User settings will be saved in the registry.
+- Allow up to 3 input setups, with automatic detection on which to enable.
+- Optional automatic sensitivity setting
+
+Please note that you need to stop the vu1 web service before running this program, otherwise it can't open the usb port.
   
 
- ![Schermafbeelding 2024-03-14 101906](https://github.com/HompieDompie/VU1_Control/assets/155307436/46517786-21a8-4772-bc36-5790a55e9670)
-
-
+![image](https://github.com/user-attachments/assets/58443c15-e5e5-4473-b640-139a981d84cc)

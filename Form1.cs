@@ -33,7 +33,7 @@ namespace VU1_Control
         SerialPort SP { get; set; }
         StreamWriter DebugStream;
         
-        DateTime firstZeroTime, lastAutoSwitchTime, lastAutoSenseTime;
+        DateTime firstZeroTime, lastAutoSenseTime;
         bool zeroFound = false;
         bool zeroTimeoutStarted = false;
         MMDeviceCollection audioDevices;
@@ -373,12 +373,15 @@ namespace VU1_Control
                 if (setup[i].SelectedDeviceIdx >= 0 && setup[i].HasInput) 
                 {
                     setup[i].HasInput = false;
-                    if (i != CurrentInputIndex)
+                    setup[i].HasInputCount++;
+
+                    if (i != CurrentInputIndex && setup[i].HasInputCount > 1)
                     {
                         CurrentInputIndex = i;
                         zeroFound = false;
                         zeroTimeoutStarted = false;
                         setup[i].MaxLeftValueInt = setup[i].MaxRightValueInt = 0;
+                        setup[i].HasInputCount = 0;
                         SetInputColor();
                     }
                     break;
@@ -714,10 +717,9 @@ namespace VU1_Control
             {
                 try
                 {
-                    if (running && AutoSwitch && (DateTime.Now - lastAutoSwitchTime > TimeSpan.FromSeconds(AutoOffTimeout)))
+                    if (running && AutoSwitch) // && (DateTime.Now - lastAutoSwitchTime > TimeSpan.FromSeconds(AutoOffTimeout)))
                     {
                         CheckInputsForAudio();
-                        lastAutoSwitchTime = DateTime.Now;
                     }
                 }
                 catch { }
@@ -1058,6 +1060,7 @@ namespace VU1_Control
         public int MaxAutoSenseValueInt { get; set; }
         
         public bool HasInput { get; set;}
+        public int HasInputCount { get; set; }
 
         public int AutoSwitchThreshold { get; set; } = 0;
         public int BytesPerSample { get; set; } = 0;
