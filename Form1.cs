@@ -33,9 +33,7 @@ namespace VU1_Control
         SerialPort SP { get; set; }
         StreamWriter DebugStream;
         
-        DateTime firstZeroTime, lastAutoSenseTime;
-        bool zeroFound = false;
-        bool zeroTimeoutStarted = false;
+ 
         MMDeviceCollection audioDevices;
 
         int LeftDialNr = 0;
@@ -144,7 +142,7 @@ namespace VU1_Control
             tbLeftCalibration.Text = LeftCalibrateValue.ToString();
             tbRightCalibration.Text = RightCalibrateValue.ToString();
 
-            cbOutputs.SelectedIndex = setup[CurrentSetupIndex].SelectedDeviceIdx;
+            cbOutputs.SelectedIndex = setup[CurrentSetupIndex].SelectedDeviceIdx + 1;
 
             tbAutoOffTime.Text = AutoOffTimeout.ToString();
             cbAutoSwitch.Checked = AutoSwitch;
@@ -336,6 +334,7 @@ namespace VU1_Control
             audioDevices = enumerator.EnumerateAudioEndPoints(DataFlow.All, DeviceState.Active);
             enumerator.Dispose();
 
+            cbOutputs.Items.Add("None: Disable");
             for (int i = 0; i < audioDevices.Count; i++)
             {
                 MMDevice mm_dev = audioDevices[i];
@@ -370,21 +369,28 @@ namespace VU1_Control
         {
             for (int i = 0; i < NR_SETUP; i++)
             {
-                if (setup[i].SelectedDeviceIdx >= 0 && setup[i].HasInput) 
+                if (setup[i].SelectedDeviceIdx >= 0)
                 {
-                    setup[i].HasInput = false;
-                    setup[i].HasInputCount++;
-
-                    if (i != CurrentInputIndex && setup[i].HasInputCount > 1)
+                    if (setup[i].HasInput)
                     {
-                        CurrentInputIndex = i;
-                        zeroFound = false;
-                        zeroTimeoutStarted = false;
-                        setup[i].MaxLeftValueInt = setup[i].MaxRightValueInt = 0;
-                        setup[i].HasInputCount = 0;
-                        SetInputColor();
+                        setup[i].HasInput = false;
+                        setup[i].HasInputCount++;
+
+                        if (i != CurrentInputIndex && setup[i].HasInputCount > 1)
+                        {
+                            CurrentInputIndex = i;
+                            setup[i].zeroFound = false;
+                            setup[i].zeroTimeoutStarted = false;
+                            setup[i].MaxLeftValueInt = setup[i].MaxRightValueInt = 0;
+                            setup[i].HasInputCount = 0;
+                            SetInputColor();
+                        }
+                        break;
                     }
-                    break;
+                    else
+                    {
+                        setup[i].HasInputCount = 0;
+                    }
                 }
             }
         }
@@ -540,11 +546,11 @@ namespace VU1_Control
         {
             for (; ; )
             {
-                if (running)
+                if (running && setup[CurrentInputIndex].SelectedDeviceIdx >= 0)
                 {
                     handleAutoOff();
-
-                    if (LastLeftValue != setup[CurrentInputIndex].MaxLeftValueInt || LastRightValue != setup[CurrentInputIndex].MaxRightValueInt)
+                    if (!setup[CurrentInputIndex].zeroTimeoutStarted &&
+                        (LastLeftValue != setup[CurrentInputIndex].MaxLeftValueInt || LastRightValue != setup[CurrentInputIndex].MaxRightValueInt))
                     {
                         //double newValueL = (Smoothness * LastLeftValue) + (1.0 - Smoothness) * (MaxLeftValueInt * MaxLeftValueInt);
                         //double newValueR = (Smoothness * LastRightValue) + (1.0 - Smoothness) * (MaxRightValueInt * MaxRightValueInt);
@@ -558,7 +564,7 @@ namespace VU1_Control
 
                         SetVUMeterValues(LastLeftValue, LastRightValue);
                     }
-                   
+
                     setup[CurrentInputIndex].MaxLeftValueInt = setup[CurrentInputIndex].MaxRightValueInt = 0;  // Reset max after use
                 }
                 Thread.Sleep(100);
@@ -682,29 +688,29 @@ namespace VU1_Control
         {
             if (AutoOffTimeout > 0)
             {
-                if (setup[CurrentInputIndex].MaxLeftValueInt < setup[CurrentInputIndex].AutoSwitchThreshold && 
-                    setup[CurrentInputIndex].MaxRightValueInt < setup[CurrentInputIndex].AutoSwitchThreshold)
+                if (setup[CurrentInputIndex].MaxLeftValueInt <= setup[CurrentInputIndex].AutoSwitchThreshold && 
+                    setup[CurrentInputIndex].MaxRightValueInt <= setup[CurrentInputIndex].AutoSwitchThreshold)
                 {
-                    if (!zeroFound)
+                    if (!setup[CurrentInputIndex].zeroFound)
                     {
-                        zeroFound = true;
-                        firstZeroTime = DateTime.Now;
+                        setup[CurrentInputIndex].zeroFound = true;
+                        setup[CurrentInputIndex].firstZeroTime = DateTime.Now;
                     }
-                    else if (!zeroTimeoutStarted)
+                    else if (!setup[CurrentInputIndex].zeroTimeoutStarted)
                     {
-                        if (DateTime.Now - firstZeroTime > TimeSpan.FromSeconds(AutoOffTimeout))
+                        if (DateTime.Now - setup[CurrentInputIndex].firstZeroTime > TimeSpan.FromSeconds(AutoOffTimeout))
                         {
-                            zeroTimeoutStarted = true;
+                            setup[CurrentInputIndex].zeroTimeoutStarted = true;
                             SetColor(0, 0, 0);
                         }
                     }
                 }
                 else
                 {
-                    zeroFound = false;
-                    if (zeroTimeoutStarted)
+                    setup[CurrentInputIndex].zeroFound = false;
+                    if (setup[CurrentInputIndex].zeroTimeoutStarted && setup[CurrentInputIndex].HasInputCount > 1)
                     {
-                        zeroTimeoutStarted = false;
+                        setup[CurrentInputIndex].zeroTimeoutStarted = false;
                         SetInputColor();
                     }
                 }
@@ -735,11 +741,11 @@ namespace VU1_Control
                 try
                 {
                     if (running && setup[CurrentInputIndex].AutoSensitivity && 
-                        (DateTime.Now - lastAutoSenseTime > TimeSpan.FromSeconds(setup[CurrentInputIndex].AutoSensitivityTime)))
+                        (DateTime.Now - setup[CurrentInputIndex].lastAutoSenseTime > TimeSpan.FromSeconds(setup[CurrentInputIndex].AutoSensitivityTime)))
                     {
                         doCheckAutoSensitivity();
                         setup[CurrentInputIndex].MaxAutoSenseValueInt = 0;
-                        lastAutoSenseTime = DateTime.Now;
+                        setup[CurrentInputIndex].lastAutoSenseTime = DateTime.Now;
                     }
                 }
                 catch { }
@@ -768,7 +774,7 @@ namespace VU1_Control
         {
             if (cbOutputs.SelectedIndex >= 0)
             {
-                setup[CurrentSetupIndex].SelectedDeviceIdx = cbOutputs.SelectedIndex;
+                setup[CurrentSetupIndex].SelectedDeviceIdx = cbOutputs.SelectedIndex - 1;
             }
         }
 
@@ -1067,6 +1073,10 @@ namespace VU1_Control
 
         public bool AutoSensitivity { get; set; }
         public int AutoSensitivityTime { get; set; } = 0;
+
+        public DateTime firstZeroTime, lastAutoSenseTime;
+        public bool zeroFound = false;
+        public bool zeroTimeoutStarted = false;
     }
 }
 
