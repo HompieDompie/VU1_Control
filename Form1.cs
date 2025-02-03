@@ -108,13 +108,13 @@ namespace VU1_Control
         {
             string input = "";
 
-            infoLabel.Items[0].Text = "Active: " + (CurrentInputIndex + 1);
+            //infoLabel.Items[0].Text = "Active: " + (CurrentInputIndex + 1);
 
             for (int i = 0; i < NR_SETUP; i++)
             {
                 if (setup[i].SelectedDeviceIdx >= 0)
                 {
-                    input += (i + 1).ToString() + " (" + setup[i].Sensitivity + " " + setup[i].HasInput + ") ";
+                    input += (i + 1).ToString() + " (" + setup[i].Sensitivity.ToString("F2") + " " + setup[i].HasInput + ") ";
                 }
             }
             infoLabel.Items[0].Text = "Input " + input + " Active: " + (CurrentInputIndex + 1);
@@ -514,20 +514,20 @@ namespace VU1_Control
                     leftValue = BitConverter.ToSingle(e.Buffer, indexSample * bytesPerSample);
                     rightValue = BitConverter.ToSingle(e.Buffer, (indexSample + 1) * bytesPerSample);
                 }
-                //else if (bytesPerSample == 8)
-                //{
-                //    leftValue = (float)BitConverter.ToDouble(e.Buffer, indexSample * bytesPerSample);
-                //    rightValue = (float)BitConverter.ToDouble(e.Buffer, (indexSample + 1) * bytesPerSample);
-                //}
+                else if (bytesPerSample == 8)
+                {
+                    leftValue = (float)BitConverter.ToDouble(e.Buffer, indexSample * bytesPerSample);
+                    rightValue = (float)BitConverter.ToDouble(e.Buffer, (indexSample + 1) * bytesPerSample);
+                }
 
                 setup[SetupIndex].MaxLeftValueInt = (int)Math.Max(setup[SetupIndex].MaxLeftValueInt, Math.Abs(leftValue * 100.0F));
                 setup[SetupIndex].MaxRightValueInt = (int)Math.Max(setup[SetupIndex].MaxRightValueInt, Math.Abs(rightValue * 100.0F));
 
-                setup[SetupIndex].HasInput = setup[SetupIndex].MaxLeftValueInt >= setup[CurrentInputIndex].AutoSwitchThreshold ||
-                                             setup[SetupIndex].MaxRightValueInt >= setup[CurrentInputIndex].AutoSwitchThreshold;
+                setup[SetupIndex].HasInput = setup[SetupIndex].MaxLeftValueInt > setup[SetupIndex].AutoSwitchThreshold ||
+                                             setup[SetupIndex].MaxRightValueInt > setup[SetupIndex].AutoSwitchThreshold;
              }
 
-            //Debug("In:" + e.BytesRecorded.ToString() + " byte. L=" + MaxLeftValueInt.ToString() + " R=" + MaxRightValueInt.ToString() );
+            // Debug("In " + SetupIndex + ":" + e.BytesRecorded.ToString() + " byte. L=" + setup[SetupIndex].MaxLeftValueInt.ToString() + " R=" + setup[SetupIndex].MaxRightValueInt.ToString() );
         }
 
         private void Loopback_capture_RecordingStopped(object sender, NAudio.Wave.StoppedEventArgs e, int SetupIndex)
