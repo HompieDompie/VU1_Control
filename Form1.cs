@@ -28,7 +28,7 @@ namespace VU1_Control
         Setup [] setup = new Setup[NR_SETUP];
         int CurrentSetupIndex = 0;
         int CurrentInputIndex = 0;
-
+         
         bool running = false;
         SerialPort SP { get; set; }
         StreamWriter DebugStream;
@@ -72,7 +72,7 @@ namespace VU1_Control
             if (!FindVUMeters())
             {
                 MessageBox.Show("No VU meters found.");
-                Environment.Exit(0);
+                //Environment.Exit(0);
             }
             ReadFromRegistry();
             CurrentSetupIndex = CurrentInputIndex = 0;    // 1st setup takes preference on startup
@@ -81,7 +81,6 @@ namespace VU1_Control
             UpdateUI();
             SetVUMeterValues(0, 0);
             SetSetupColor();
-
             InitAudioDevices();
 
             UITimer.Tick += UITimer_Elapsed;
@@ -167,7 +166,8 @@ namespace VU1_Control
                     Sensitivity = (int)regKey.GetValue("Sensitivity" + i, 50) / 50.0,
                     Smoothness = (int)regKey.GetValue("Smoothness" + i, 20) / 100.0,
 
-                    SelectedDeviceIdx = (int)regKey.GetValue("SelectedIndex" + i, -1),
+                    //SelectedDeviceIdx = (int)regKey.GetValue("SelectedIndex" + i, -1),
+                    SelectedDeviceIdx = getDeviceIndexFromId((string)regKey.GetValue("SelectedId" + i, "")),
                     AutoSwitchThreshold = (int)regKey.GetValue("AutoSwitchThreshold" + i, 0),
 
                     AutoSensitivity = (int)regKey.GetValue("AutoSensitivity" + i, 0) == 1,
@@ -201,7 +201,7 @@ namespace VU1_Control
                 regKey.SetValue("Sensitivity" + i, (int)(setup[i].Sensitivity * 50));
                 regKey.SetValue("Smoothness" + i, (int)(setup[i].Smoothness * 100));
 
-                regKey.SetValue("SelectedIndex" + i, setup[i].SelectedDeviceIdx);
+                regKey.SetValue("SelectedId" + i, getIdFromDeviceIndex(setup[i].SelectedDeviceIdx));
                 regKey.SetValue("AutoSwitchThreshold" + i, setup[i].AutoSwitchThreshold);
 
                 regKey.SetValue("AutoSensitivity" + i, setup[i].AutoSensitivity ? 1 : 0);
@@ -219,6 +219,30 @@ namespace VU1_Control
             
             regKey.Close();
         }
+
+        private string getIdFromDeviceIndex(int DeviceIndex)
+        {
+            if (DeviceIndex >= 0)
+            {
+                MMDevice mm_dev = audioDevices[DeviceIndex];
+                return mm_dev.ID;
+            }
+            return "";
+        }
+
+        private int getDeviceIndexFromId(string Id)
+        {
+            for (int i = 0; i < audioDevices.Count; i++)
+            {
+                MMDevice mm_dev = audioDevices[i];
+                if (mm_dev.ID.Equals(Id))
+                {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
 
 
 
@@ -537,7 +561,7 @@ namespace VU1_Control
             setup[SetupIndex].MaxRightValueInt = 0;
         }
 
-        private int LastLeftValue = -1;
+        private int LastLeftValue = -1; 
         private int LastRightValue = -1;
 
         // UpdateVU: Seperate task function that periodically sends the current max left and right values to the meters.
